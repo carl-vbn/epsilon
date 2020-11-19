@@ -7,12 +7,11 @@
 #include <poincare/code_point_layout.h>
 #include <poincare/fraction_layout.h>
 #include <poincare/vertical_offset_layout.h>
+#include <algorithm>
 
 using namespace Poincare;
 
 namespace Settings {
-
-static inline int maxInt(int x, int y) { return x > y ? x : y; }
 
 PreferencesController::PreferencesController(Responder * parentResponder) :
   GenericSubController(parentResponder)
@@ -106,6 +105,16 @@ Layout PreferencesController::layoutForPreferences(I18n::Message message) {
           VerticalOffsetLayout::Builder(LayoutHelper::String(superscript, strlen(superscript), k_layoutFont), VerticalOffsetLayoutNode::Position::Superscript)
         );
     }
+
+    // Font size
+    case I18n::Message::LargeFont:
+    case I18n::Message::SmallFont:
+    {
+      const char * text = "abc";
+      const KDFont * font = message == I18n::Message::LargeFont ? KDFont::LargeFont : KDFont::SmallFont;
+      return LayoutHelper::String(text, strlen(text), font);
+    }
+
     default:
       assert(false);
       return Layout();
@@ -115,7 +124,7 @@ Layout PreferencesController::layoutForPreferences(I18n::Message message) {
 void PreferencesController::willDisplayCellForIndex(HighlightCell * cell, int index) {
   GenericSubController::willDisplayCellForIndex(cell, index);
   MessageTableCellWithExpression * myCell = (MessageTableCellWithExpression *)cell;
-  myCell->setLayout(layoutForPreferences(m_messageTreeModel->children(index)->label()));
+  myCell->setLayout(layoutForPreferences(m_messageTreeModel->childAtIndex(index)->label()));
 }
 
 KDCoordinate PreferencesController::rowHeight(int j) {
@@ -135,13 +144,16 @@ void PreferencesController::setPreferenceWithValueIndex(I18n::Message message, i
       /* In Engineering mode, the number of significant digits cannot be lower
        * than 3, because we need to be able to display 100 for instance. */
       // TODO: Add warning about signifiant digits change ?
-      preferences->setNumberOfSignificantDigits(maxInt(preferences->numberOfSignificantDigits(), 3));
+      preferences->setNumberOfSignificantDigits(std::max<int>(preferences->numberOfSignificantDigits(), 3));
     }
   } else if (message == I18n::Message::EditionMode) {
     preferences->setEditionMode((Preferences::EditionMode)valueIndex);
   } else if (message == I18n::Message::ComplexFormat) {
     preferences->setComplexFormat((Preferences::ComplexFormat)valueIndex);
+  } else if (message == I18n::Message::FontSizes) {
+    GlobalPreferences::sharedGlobalPreferences()->setFont(valueIndex == 0 ? KDFont::LargeFont : KDFont::SmallFont);
   }
+
 }
 
 int PreferencesController::valueIndexForPreference(I18n::Message message) const {
@@ -157,6 +169,9 @@ int PreferencesController::valueIndexForPreference(I18n::Message message) const 
   }
   if (message == I18n::Message::ComplexFormat) {
     return (int)preferences->complexFormat();
+  }
+  if (message == I18n::Message::FontSizes) {
+    return GlobalPreferences::sharedGlobalPreferences()->font() == KDFont::LargeFont ? 0 : 1;
   }
   return 0;
 }

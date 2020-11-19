@@ -4,10 +4,9 @@
 #include <poincare/layout_helper.h>
 #include <poincare/serialization_helper.h>
 #include <poincare/square_bracket_layout.h>
+#include <algorithm>
 
 namespace Poincare {
-
-static inline int minInt(int x, int y) { return x < y ? x : y; }
 
 // MatrixLayoutNode
 
@@ -28,7 +27,7 @@ void MatrixLayoutNode::removeGreySquares() {
 
 // LayoutNode
 
-void MatrixLayoutNode::moveCursorLeft(LayoutCursor * cursor, bool * shouldRecomputeLayout) {
+void MatrixLayoutNode::moveCursorLeft(LayoutCursor * cursor, bool * shouldRecomputeLayout, bool forSelection) {
   int childIndex = indexOfChild(cursor->layoutNode());
   if (childIndex >= 0
       && cursor->position() == LayoutCursor::Position::Left
@@ -54,10 +53,10 @@ void MatrixLayoutNode::moveCursorLeft(LayoutCursor * cursor, bool * shouldRecomp
     cursor->setLayoutNode(lastChild);
     return;
   }
-  GridLayoutNode::moveCursorLeft(cursor, shouldRecomputeLayout);
+  GridLayoutNode::moveCursorLeft(cursor, shouldRecomputeLayout, forSelection);
 }
 
-void MatrixLayoutNode::moveCursorRight(LayoutCursor * cursor, bool * shouldRecomputeLayout) {
+void MatrixLayoutNode::moveCursorRight(LayoutCursor * cursor, bool * shouldRecomputeLayout, bool forSelection) {
   if (cursor->layoutNode() == this
       && cursor->position() == LayoutCursor::Position::Left)
   {
@@ -83,7 +82,7 @@ void MatrixLayoutNode::moveCursorRight(LayoutCursor * cursor, bool * shouldRecom
     return;
 
   }
-  GridLayoutNode::moveCursorRight(cursor, shouldRecomputeLayout);
+  GridLayoutNode::moveCursorRight(cursor, shouldRecomputeLayout, forSelection);
 }
 
 void MatrixLayoutNode::willAddSiblingToEmptyChildAtIndex(int childIndex) {
@@ -164,7 +163,7 @@ int MatrixLayoutNode::serialize(char * buffer, int bufferSize, Preferences::Prin
 
   // Write the final closing bracket
   numberOfChar += SerializationHelper::CodePoint(buffer + numberOfChar, bufferSize - numberOfChar, ']');
-  return minInt(numberOfChar, bufferSize-1);
+  return std::min(numberOfChar, bufferSize-1);
 }
 
 // Protected
@@ -182,7 +181,7 @@ KDPoint MatrixLayoutNode::positionOfChild(LayoutNode * l) {
   return GridLayoutNode::positionOfChild(l).translatedBy(KDPoint(KDPoint(SquareBracketLayoutNode::BracketWidth(), SquareBracketLayoutNode::k_lineThickness)));
 }
 
-void MatrixLayoutNode::moveCursorVertically(VerticalDirection direction, LayoutCursor * cursor, bool * shouldRecomputeLayout, bool equivalentPositionVisited) {
+void MatrixLayoutNode::moveCursorVertically(VerticalDirection direction, LayoutCursor * cursor, bool * shouldRecomputeLayout, bool equivalentPositionVisited, bool forSelection) {
   MatrixLayout thisRef = MatrixLayout(this);
   bool shouldRemoveGreySquares = false;
   int firstIndex = direction == VerticalDirection::Up ? 0 : numberOfChildren() - m_numberOfColumns;
@@ -192,14 +191,14 @@ void MatrixLayoutNode::moveCursorVertically(VerticalDirection direction, LayoutC
     if (i >= lastIndex) {
       break;
     }
-    if (cursor->layoutReference().node()->hasAncestor(l, true)) {
+    if (cursor->layout().node()->hasAncestor(l, true)) {
       // The cursor is leaving the matrix, so remove the grey squares.
       shouldRemoveGreySquares = true;
       break;
     }
     i++;
   }
-  GridLayoutNode::moveCursorVertically(direction, cursor, shouldRecomputeLayout, equivalentPositionVisited);
+  GridLayoutNode::moveCursorVertically(direction, cursor, shouldRecomputeLayout, equivalentPositionVisited, forSelection);
   if (cursor->isDefined() && shouldRemoveGreySquares) {
     assert(thisRef.hasGreySquares());
     thisRef.removeGreySquares();
@@ -308,7 +307,7 @@ bool MatrixLayoutNode::hasGreySquares() const {
   return false;
 }
 
-void MatrixLayoutNode::render(KDContext * ctx, KDPoint p, KDColor expressionColor, KDColor backgroundColor) {
+void MatrixLayoutNode::render(KDContext * ctx, KDPoint p, KDColor expressionColor, KDColor backgroundColor, Layout * selectionStart, Layout * selectionEnd, KDColor selectionColor) {
   BracketPairLayoutNode::RenderWithChildSize(gridSize(), ctx, p, expressionColor, backgroundColor);
 }
 
@@ -331,7 +330,7 @@ void MatrixLayoutNode::didReplaceChildAtIndex(int index, LayoutCursor * cursor, 
 }
 
 MatrixLayout MatrixLayout::Builder(Layout l1, Layout l2, Layout l3, Layout l4) {
-  MatrixLayout m = TreeHandle::NAryBuilder<MatrixLayout, MatrixLayoutNode>(ArrayBuilder<TreeHandle>(l1,l2,l3,l4).array(), 4);
+  MatrixLayout m = TreeHandle::NAryBuilder<MatrixLayout, MatrixLayoutNode>({l1, l2, l3, l4});
   m.setDimensions(2, 2);
   return m;
 }

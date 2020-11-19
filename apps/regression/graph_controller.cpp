@@ -4,18 +4,15 @@
 #include "../apps_container.h"
 #include <poincare/preferences.h>
 #include <cmath>
+#include <algorithm>
 
 using namespace Poincare;
 using namespace Shared;
 
-static inline float minFloat(float x, float y) { return x < y ? x : y; }
-static inline float maxFloat(float x, float y) { return x > y ? x : y; }
-static inline int maxInt(int x, int y) { return x > y ? x : y; }
-
 namespace Regression {
 
-GraphController::GraphController(Responder * parentResponder, InputEventHandlerDelegate * inputEventHandlerDelegate, ButtonRowController * header, Store * store, CurveViewCursor * cursor, uint32_t * modelVersion, uint32_t * rangeVersion, int * selectedDotIndex, int * selectedSeriesIndex) :
-  InteractiveCurveViewController(parentResponder, inputEventHandlerDelegate, header, store, &m_view, cursor, modelVersion, rangeVersion),
+GraphController::GraphController(Responder * parentResponder, InputEventHandlerDelegate * inputEventHandlerDelegate, ButtonRowController * header, Store * store, CurveViewCursor * cursor, uint32_t * modelVersion, uint32_t * previousModelsVersions, uint32_t * rangeVersion, int * selectedDotIndex, int * selectedSeriesIndex) :
+  InteractiveCurveViewController(parentResponder, inputEventHandlerDelegate, header, store, &m_view, cursor, modelVersion, previousModelsVersions, rangeVersion),
   m_crossCursorView(),
   m_roundCursorView(),
   m_bannerView(this, inputEventHandlerDelegate, this),
@@ -84,18 +81,7 @@ void GraphController::viewWillAppear() {
 
   /* Since *m_selectedDotIndex is altered by initCursorParameters(),
    * the following must absolutely come at the end. */
-  if (*m_selectedDotIndex >= 0) {
-    setRoundCrossCursorView(false);
-  } else {
-    setRoundCrossCursorView(true);
-    m_roundCursorView.setColor(Palette::DataColor[*m_selectedSeriesIndex]);
-  }
-}
-
-void GraphController::selectRegressionCurve() {
-  *m_selectedDotIndex = -1;
-  setRoundCrossCursorView(true);
-  m_roundCursorView.setColor(Palette::DataColor[*m_selectedSeriesIndex]);
+  setRoundCrossCursorView();
 }
 
 // Private
@@ -176,7 +162,7 @@ void GraphController::reloadBannerView() {
   }
   if (!coefficientsAreDefined) {
     // Force the "Data not suitable" message to be on the next line
-    int numberOfCharToCompleteLine = maxInt(Ion::Display::Width / BannerView::Font()->glyphSize().width() - strlen(I18n::translate(formula)), 0);
+    int numberOfCharToCompleteLine = std::max<int>(Ion::Display::Width / BannerView::Font()->glyphSize().width() - strlen(I18n::translate(formula)), 0);
     numberOfChar = 0;
     // Padding
     Shared::TextHelpers::PadWithSpaces(buffer, bufferSize, &numberOfChar, numberOfCharToCompleteLine - 1);
@@ -202,13 +188,14 @@ void GraphController::reloadBannerView() {
   }
 
   if (m_store->seriesRegressionType(*m_selectedSeriesIndex) == Model::Type::Linear) {
+    int index = model->numberOfCoefficients();
     // Set "r=..."
     numberOfChar = 0;
     legend = " r=";
     double r = m_store->correlationCoefficient(*m_selectedSeriesIndex);
     numberOfChar += strlcpy(buffer, legend, bufferSize);
     numberOfChar += PoincareHelpers::ConvertFloatToText<double>(r, buffer + numberOfChar, bufferSize - numberOfChar, Preferences::LargeNumberOfSignificantDigits);
-    m_bannerView.subTextAtIndex(2)->setText(buffer);
+    m_bannerView.subTextAtIndex(0+index)->setText(buffer);
 
     // Set "r2=..."
     numberOfChar = 0;
@@ -216,11 +203,11 @@ void GraphController::reloadBannerView() {
     double r2 = m_store->squaredCorrelationCoefficient(*m_selectedSeriesIndex);
     numberOfChar += strlcpy(buffer, legend, bufferSize);
     numberOfChar += PoincareHelpers::ConvertFloatToText<double>(r2, buffer + numberOfChar, bufferSize - numberOfChar, Preferences::LargeNumberOfSignificantDigits);
-    m_bannerView.subTextAtIndex(3)->setText(buffer);
+    m_bannerView.subTextAtIndex(1+index)->setText(buffer);
 
     // Clean the last subview
     buffer[0] = 0;
-    m_bannerView.subTextAtIndex(4)->setText(buffer);
+    m_bannerView.subTextAtIndex(2+index)->setText(buffer);
 
   } else {
     // Empty all non used subviews
@@ -232,28 +219,25 @@ void GraphController::reloadBannerView() {
   m_bannerView.reload();
 }
 
-bool GraphController::moveCursorHorizontally(int direction) {
+bool GraphController::moveCursorHorizontally(int direction, bool fast) {
+  double x;
+  double y;
   if (*m_selectedDotIndex >= 0) {
     int dotSelected = m_store->nextDot(*m_selectedSeriesIndex, direction, *m_selectedDotIndex);
     if (dotSelected >= 0 && dotSelected < m_store->numberOfPairsOfSeries(*m_selectedSeriesIndex)) {
-      *m_selectedDotIndex = dotSelected;
-      double x = m_store->get(*m_selectedSeriesIndex, 0, *m_selectedDotIndex);
-      double y = m_store->get(*m_selectedSeriesIndex, 1, *m_selectedDotIndex);
-      m_cursor->moveTo(x, x, y);
-      return true;
+      x = m_store->get(*m_selectedSeriesIndex, 0, dotSelected);
+      y = m_store->get(*m_selectedSeriesIndex, 1, dotSelected);
+    } else if (dotSelected == m_store->numberOfPairsOfSeries(*m_selectedSeriesIndex)) {
+      x = m_store->meanOfColumn(*m_selectedSeriesIndex, 0);
+      y = m_store->meanOfColumn(*m_selectedSeriesIndex, 1);
+    } else {
+      return false;
     }
-    if (dotSelected == m_store->numberOfPairsOfSeries(*m_selectedSeriesIndex)) {
-      *m_selectedDotIndex = dotSelected;
-      double x = m_store->meanOfColumn(*m_selectedSeriesIndex, 0);
-      double y = m_store->meanOfColumn(*m_selectedSeriesIndex, 1);
-      m_cursor->moveTo(x, x, y);
-      return true;
-    }
-    return false;
+    *m_selectedDotIndex = dotSelected;
+  } else {
+    x = m_cursor->x() + direction * m_store->xGridUnit()/k_numberOfCursorStepsInGradUnit;
+    y = yValue(*m_selectedSeriesIndex, x, globalContext());
   }
-  double x = direction > 0 ? m_cursor->x() + m_store->xGridUnit()/k_numberOfCursorStepsInGradUnit :
-    m_cursor->x() - m_store->xGridUnit()/k_numberOfCursorStepsInGradUnit;
-  double y = yValue(*m_selectedSeriesIndex, x, globalContext());
   m_cursor->moveTo(x, x, y);
   return true;
 }
@@ -327,19 +311,22 @@ bool GraphController::moveCursorVertically(int direction) {
 
   assert(!validDot || !validRegression);
 
+  /* The model should be up to date before setting the cursor view. */
+
   if (validRegression) {
     // Select the regression
     *m_selectedSeriesIndex = closestRegressionSeries;
-    selectRegressionCurve();
+    *m_selectedDotIndex = -1;
+    setRoundCrossCursorView();
     m_cursor->moveTo(x, x, yValue(*m_selectedSeriesIndex, x, context));
     return true;
   }
 
   if (validDot) {
     // Select the dot
-    setRoundCrossCursorView(false);
     *m_selectedSeriesIndex = closestDotSeries;
     *m_selectedDotIndex = dotSelected;
+    setRoundCrossCursorView();
     if (dotSelected == m_store->numberOfPairsOfSeries(*m_selectedSeriesIndex)) {
       // Select the mean dot
       double x = m_store->meanOfColumn(*m_selectedSeriesIndex, 0);
@@ -360,6 +347,11 @@ bool GraphController::moveCursorVertically(int direction) {
 
 uint32_t GraphController::modelVersion() {
   return m_store->storeChecksum();
+}
+
+uint32_t GraphController::modelVersionAtIndex(int i) {
+  assert(i < numberOfMemoizedVersions());
+  return *(m_store->seriesChecksum() + i);
 }
 
 uint32_t GraphController::rangeVersion() {
@@ -396,8 +388,8 @@ InteractiveCurveViewRangeDelegate::Range GraphController::computeYRange(Interact
   for (int series = 0; series < Store::k_numberOfSeries; series++) {
     for (int k = 0; k < m_store->numberOfPairsOfSeries(series); k++) {
       if (m_store->xMin() <= m_store->get(series, 0, k) && m_store->get(series, 0, k) <= m_store->xMax()) {
-        minY = minFloat(minY, m_store->get(series, 1, k));
-        maxY = maxFloat(maxY, m_store->get(series, 1, k));
+        minY = std::min<float>(minY, m_store->get(series, 1, k));
+        maxY = std::max<float>(maxY, m_store->get(series, 1, k));
       }
     }
   }
@@ -407,8 +399,17 @@ InteractiveCurveViewRangeDelegate::Range GraphController::computeYRange(Interact
   return range;
 }
 
-void GraphController::setRoundCrossCursorView(bool round) {
+void GraphController::setRoundCrossCursorView() {
+  /* At this point, the model (selected series and dot indices) should be up
+   * to date. */
+  bool round = *m_selectedDotIndex < 0;
+  if (round) {
+    // Set the color although the cursor view stays round
+    assert(*m_selectedSeriesIndex < Palette::numberOfDataColors());
+    m_roundCursorView.setColor(Palette::DataColor[*m_selectedSeriesIndex]);
+  }
   CursorView * nextCursorView = round ? static_cast<Shared::CursorView *>(&m_roundCursorView) : static_cast<Shared::CursorView *>(&m_crossCursorView);
+  // Escape if the cursor view stays the same
   if (m_view.cursorView() == nextCursorView) {
     return;
   }

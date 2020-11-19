@@ -8,17 +8,17 @@
 #include "../shared/layout_field_delegate.h"
 #include "history_controller.h"
 #include "calculation_store.h"
+#include "selectable_table_view.h"
 
 namespace Calculation {
-class HistoryController;
 
 /* TODO: implement a split view */
 class EditExpressionController : public ViewController, public Shared::TextFieldDelegate, public Shared::LayoutFieldDelegate {
 public:
   EditExpressionController(Responder * parentResponder, InputEventHandlerDelegate * inputEventHandlerDelegate, HistoryController * historyController, CalculationStore * calculationStore);
-  View * view() override;
+  View * view() override { return &m_contentView; }
   void didBecomeFirstResponder() override;
-  void viewDidDisappear() override;
+  void viewWillAppear() override;
   void insertTextBody(const char * text);
 
   /* TextFieldDelegate */
@@ -35,16 +35,15 @@ public:
 private:
   class ContentView : public View {
   public:
-    ContentView(Responder * parentResponder, TableView * subview, InputEventHandlerDelegate * inputEventHandlerDelegate, TextFieldDelegate * textFieldDelegate, LayoutFieldDelegate * layoutFieldDelegate);
+    ContentView(Responder * parentResponder, CalculationSelectableTableView * subview, InputEventHandlerDelegate * inputEventHandlerDelegate, TextFieldDelegate * textFieldDelegate, LayoutFieldDelegate * layoutFieldDelegate);
     void reload();
-    TableView * mainView() { return m_mainView; }
+    CalculationSelectableTableView * mainView() { return m_mainView; }
     ExpressionField * expressionField() { return &m_expressionField; }
-    /* View */
+  private:
     int numberOfSubviews() const override { return 2; }
     View * subviewAtIndex(int index) override;
-    void layoutSubviews() override;
-  private:
-    TableView * m_mainView;
+    void layoutSubviews(bool force = false) override;
+    CalculationSelectableTableView * m_mainView;
     ExpressionField m_expressionField;
   };
   void reloadView();
@@ -56,7 +55,6 @@ private:
   HistoryController * m_historyController;
   CalculationStore * m_calculationStore;
   ContentView m_contentView;
-  bool m_inputViewHeightIsMaximal;
 };
 
 }

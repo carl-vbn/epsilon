@@ -7,25 +7,33 @@ app_calculation_test_src += $(addprefix apps/calculation/,\
 )
 
 app_calculation_src = $(addprefix apps/calculation/,\
+  additional_outputs/complex_graph_cell.cpp \
+  additional_outputs/complex_model.cpp \
+  additional_outputs/complex_list_controller.cpp \
+  additional_outputs/expression_with_equal_sign_view.cpp \
+  additional_outputs/expressions_list_controller.cpp \
+  additional_outputs/illustrated_list_controller.cpp \
+  additional_outputs/illustration_cell.cpp \
+  additional_outputs/integer_list_controller.cpp \
+  additional_outputs/scrollable_three_expressions_cell.cpp \
+  additional_outputs/list_controller.cpp \
+  additional_outputs/rational_list_controller.cpp \
+  additional_outputs/trigonometry_graph_cell.cpp \
+  additional_outputs/trigonometry_list_controller.cpp \
+  additional_outputs/trigonometry_model.cpp \
+  additional_outputs/unit_list_controller.cpp \
   app.cpp \
   edit_expression_controller.cpp \
   expression_field.cpp \
   history_view_cell.cpp \
   history_controller.cpp \
-  scrollable_expression_view.cpp \
   selectable_table_view.cpp \
 )
 
 app_calculation_src += $(app_calculation_test_src)
-app_src += $(app_calculation_src)
+apps_src += $(app_calculation_src)
 
-i18n_files += $(addprefix apps/calculation/,\
-  base.de.i18n\
-  base.en.i18n\
-  base.es.i18n\
-  base.fr.i18n\
-  base.pt.i18n\
-)
+i18n_files += $(call i18n_without_universal_for,calculation/base)
 
 tests_src += $(addprefix apps/calculation/test/,\
   calculation_store.cpp\

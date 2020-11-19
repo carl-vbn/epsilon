@@ -45,9 +45,14 @@ public:
     Calculation * calculation();
     Page activePage();
     void setActivePage(Page activePage);
+
   private:
     constexpr static int k_distributionSizes[] = {sizeof(BinomialDistribution),sizeof(ExponentialDistribution), sizeof(NormalDistribution), sizeof(PoissonDistribution), sizeof(UniformDistribution), 0};
     constexpr static size_t k_distributionSize = max(k_distributionSizes);
+
+    void deleteDistributionAndCalculation();
+    void initializeDistributionAndCalculation();
+
     char m_distribution[k_distributionSize];
     constexpr static int k_calculationSizes[] = {sizeof(LeftIntegralCalculation),sizeof(FiniteIntegralCalculation), sizeof(RightIntegralCalculation), 0};
     constexpr static size_t k_calculationSize = max(k_calculationSizes);
@@ -58,6 +63,7 @@ public:
     return static_cast<App *>(Container::activeApp());
   }
   Snapshot * snapshot() const { return static_cast<Snapshot *>(::App::snapshot()); }
+  TELEMETRY_ID("Probability");
 private:
   App(Snapshot * snapshot);
   CalculationController m_calculationController;

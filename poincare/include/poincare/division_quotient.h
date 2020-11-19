@@ -2,6 +2,7 @@
 #define POINCARE_DIVISION_QUOTIENT_H
 
 #include <poincare/expression.h>
+#include <poincare/integer.h>
 
 namespace Poincare {
 
@@ -12,7 +13,7 @@ public:
   size_t size() const override { return sizeof(DivisionQuotientNode); }
   int numberOfChildren() const override;
 #if POINCARE_TREE_LOG
-  virtual void logNodeName(std::ostream & stream) const override {
+  void logNodeName(std::ostream & stream) const override {
     stream << "DivisionQuotient";
   }
 #endif
@@ -39,11 +40,12 @@ private:
 class DivisionQuotient final : public Expression {
 public:
   DivisionQuotient(const DivisionQuotientNode * n) : Expression(n) {}
-  static DivisionQuotient Builder(Expression child0, Expression child1) { return TreeHandle::FixedArityBuilder<DivisionQuotient, DivisionQuotientNode>(ArrayBuilder<TreeHandle>(child0, child1).array(), 2); }
+  static DivisionQuotient Builder(Expression child0, Expression child1) { return TreeHandle::FixedArityBuilder<DivisionQuotient, DivisionQuotientNode>({child0, child1}); }
   static constexpr Expression::FunctionHelper s_functionHelper = Expression::FunctionHelper("quo", 2, &UntypedBuilderTwoChildren<DivisionQuotient>);
 
   // Expression
   Expression shallowReduce(Context * context);
+  static Expression Reduce(const Integer & a, const Integer & b);
 };
 
 }

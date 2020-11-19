@@ -1,63 +1,63 @@
 #include "editor_view.h"
+#include <apps/global_preferences.h>
 #include <poincare/integer.h>
 #include <escher/app.h>
+#include <escher/palette.h>
 
 namespace Code {
 
 /* EditorView */
 
-static constexpr const KDFont * editorFont = KDFont::LargeFont;
-
 EditorView::EditorView(Responder * parentResponder, App * pythonDelegate) :
   Responder(parentResponder),
   View(),
-  m_textArea(parentResponder, pythonDelegate, editorFont),
-  m_gutterView(editorFont)
+  m_textArea(parentResponder, pythonDelegate, GlobalPreferences::sharedGlobalPreferences()->font()),
+  m_gutterView(GlobalPreferences::sharedGlobalPreferences()->font())
 {
   m_textArea.setScrollViewDelegate(this);
+}
+
+bool EditorView::isAutocompleting() const {
+  return m_textArea.isAutocompleting();
+}
+
+void EditorView::resetSelection() {
+  m_textArea.resetSelection();
 }
 
 void EditorView::scrollViewDidChangeOffset(ScrollViewDataSource * scrollViewDataSource) {
   m_gutterView.setOffset(scrollViewDataSource->offset().y());
 }
 
-int EditorView::numberOfSubviews() const {
-  return 2;
-}
-
 View * EditorView::subviewAtIndex(int index) {
-  View * subviews[] = {&m_textArea, &m_gutterView};
-  return subviews[index];
+  if (index == 0) {
+    return &m_textArea;
+  }
+  assert(index == 1);
+  return &m_gutterView;
 }
 
 void EditorView::didBecomeFirstResponder() {
   Container::activeApp()->setFirstResponder(&m_textArea);
 }
 
-void EditorView::layoutSubviews() {
+void EditorView::layoutSubviews(bool force) {
   m_gutterView.setOffset(0);
   KDCoordinate gutterWidth = m_gutterView.minimalSizeForOptimalDisplay().width();
-  m_gutterView.setFrame(KDRect(0, 0, gutterWidth, bounds().height()));
+  m_gutterView.setFrame(KDRect(0, 0, gutterWidth, bounds().height()), force);
 
   m_textArea.setFrame(KDRect(
-    gutterWidth,
-    0,
-    bounds().width()-gutterWidth,
-    bounds().height()
-  ));
+        gutterWidth,
+        0,
+        bounds().width()-gutterWidth,
+        bounds().height()),
+      force);
 }
 
 /* EditorView::GutterView */
 
-EditorView::GutterView::GutterView(const KDFont * font) :
-  View(),
-  m_font(font),
-  m_offset(0)
-{
-}
-
 void EditorView::GutterView::drawRect(KDContext * ctx, KDRect rect) const {
-  KDColor textColor = KDColor::RGB24(0x919EA4);
+  KDColor textColor = Palette::BlueishGrey;
   KDColor backgroundColor = KDColor::RGB24(0xE4E6E7);
 
   ctx->fillRect(rect, backgroundColor);

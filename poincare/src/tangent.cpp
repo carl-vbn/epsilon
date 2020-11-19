@@ -30,7 +30,7 @@ template<typename T>
 Complex<T> TangentNode::computeOnComplex(const std::complex<T> c, Preferences::ComplexFormat, Preferences::AngleUnit angleUnit) {
   std::complex<T> angleInput = Trigonometry::ConvertToRadian(c, angleUnit);
   std::complex<T> res = std::tan(angleInput);
-  return Complex<T>::Builder(Trigonometry::RoundToMeaningfulDigits(res, angleInput));
+  return Complex<T>::Builder(ApproximationHelper::NeglectRealOrImaginaryPartIfNeglectable(res, angleInput));
 }
 
 Expression TangentNode::shallowReduce(ReductionContext reductionContext) {
@@ -41,6 +41,7 @@ Expression TangentNode::shallowReduce(ReductionContext reductionContext) {
 Expression Tangent::shallowReduce(ExpressionNode::ReductionContext reductionContext) {
   {
     Expression e = Expression::defaultShallowReduce();
+    e = e.defaultHandleUnitsInChildren();
     if (e.isUndefined()) {
       return e;
     }

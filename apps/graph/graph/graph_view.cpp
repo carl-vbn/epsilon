@@ -29,6 +29,13 @@ void GraphView::drawRect(KDContext * ctx, KDRect rect) const {
     Ion::Storage::Record record = functionStore->activeRecordAtIndex(i);
     ExpiringPointer<ContinuousFunction> f = functionStore->modelForRecord(record);;
     Shared::ContinuousFunction::PlotType type = f->plotType();
+    Poincare::Expression e = f->expressionReduced(context());
+    if (e.isUndefined() || (
+        type == Shared::ContinuousFunction::PlotType::Parametric &&
+        e.childAtIndex(0).isUndefined() &&
+        e.childAtIndex(1).isUndefined())) {
+      continue;
+    }
     float tmin = f->tMin();
     float tmax = f->tMax();
     /* The step is a fraction of tmax-tmin. We will evaluate the function at
@@ -50,16 +57,20 @@ void GraphView::drawRect(KDContext * ctx, KDRect rect) const {
             ContinuousFunction * f = (ContinuousFunction *)model;
             Poincare::Context * c = (Poincare::Context *)context;
             return f->evaluateXYAtParameter(t, c);
-          }, f.operator->(), context(), f->color(), record == m_selectedRecord, m_highlightedStart, m_highlightedEnd);
+          }, f.operator->(), context(), f->color(), true, record == m_selectedRecord, m_highlightedStart, m_highlightedEnd,
+          [](double t, void * model, void * context) {
+            ContinuousFunction * f = (ContinuousFunction *)model;
+            Poincare::Context * c = (Poincare::Context *)context;
+            return f->evaluateXYAtParameter(t, c);
+          });
       /* Draw tangent */
       if (m_tangent && record == m_selectedRecord) {
-        float tangentParameter[2];
-        tangentParameter[0] = f->approximateDerivative(m_curveViewCursor->x(), context());
-        tangentParameter[1] = -tangentParameter[0]*m_curveViewCursor->x()+f->evaluateXYAtParameter(m_curveViewCursor->x(), context()).x2();
-        drawCartesianCurve(ctx, rect, -INFINITY, INFINITY, [](float t, void * model, void * context) {
-              float * tangent = (float *)model;
-              return Poincare::Coordinate2D<float>(t, tangent[0]*t+tangent[1]);
-            }, tangentParameter, nullptr, Palette::GreyVeryDark);
+        float tangentParameterA = f->approximateDerivative(m_curveViewCursor->x(), context());
+        float tangentParameterB = -tangentParameterA*m_curveViewCursor->x()+f->evaluateXYAtParameter(m_curveViewCursor->x(), context()).x2();
+        // To represent the tangent, we draw segment from and to abscissas at the extremity of the drawn rect
+        float minAbscissa = pixelToFloat(Axis::Horizontal, rect.left());
+        float maxAbscissa = pixelToFloat(Axis::Horizontal, rect.right());
+        drawSegment(ctx, rect, minAbscissa, tangentParameterA*minAbscissa+tangentParameterB, maxAbscissa, tangentParameterA*maxAbscissa+tangentParameterB, Palette::GreyVeryDark, false);
       }
       continue;
     }

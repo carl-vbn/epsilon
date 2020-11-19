@@ -1,4 +1,5 @@
 #include <poincare/number.h>
+#include <poincare/based_integer.h>
 #include <poincare/decimal.h>
 #include <poincare/float.h>
 #include <poincare/infinity.h>
@@ -31,6 +32,8 @@ double NumberNode::doubleApproximation() const {
       }
     case Type::Rational:
       return static_cast<const RationalNode *>(this)->templatedApproximate<double>();
+    case Type::BasedInteger:
+      return static_cast<const BasedIntegerNode *>(this)->templatedApproximate<double>();
     default:
       assert(false);
       return 0.0;
@@ -42,7 +45,7 @@ Number Number::ParseNumber(const char * integralPart, size_t integralLength, con
   if (exponentLength == 0 && decimalLenght == 0) {
     Integer i(integralPart, integralLength, false);
     if (!i.isOverflow()) {
-      return Rational::Builder(i);
+      return BasedInteger::Builder(i, Integer::Base::Decimal);
     }
   }
   int exp;
@@ -69,7 +72,7 @@ Number Number::DecimalNumber(T f) {
     return Undefined::Builder();
   }
   if (std::isinf(f)) {
-    return Infinity::Builder(f < 0.0);
+    return Infinity::Builder(f < (T)0.0);
   }
   return Decimal::Builder(f);
 }

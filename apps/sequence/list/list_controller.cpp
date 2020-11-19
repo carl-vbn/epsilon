@@ -1,11 +1,10 @@
 #include "list_controller.h"
 #include "../app.h"
 #include <assert.h>
+#include <algorithm>
 
 using namespace Shared;
 using namespace Poincare;
-
-static inline KDCoordinate maxCoordinate(KDCoordinate x, KDCoordinate y) { return x > y ? x : y; }
 
 namespace Sequence {
 
@@ -55,7 +54,7 @@ KDCoordinate ListController::expressionRowHeight(int j) {
     return defaultHeight;
   }
   KDCoordinate sequenceHeight = layout.layoutSize().height();
-  return maxCoordinate(defaultHeight, sequenceHeight + 2*k_expressionCellVerticalMargin);
+  return std::max<KDCoordinate>(defaultHeight, sequenceHeight + 2*k_expressionCellVerticalMargin);
 }
 
 void ListController::willDisplayCellAtLocation(HighlightCell * cell, int i, int j) {
@@ -149,7 +148,8 @@ bool ListController::editInitialConditionOfSelectedRecordWithText(const char * t
   resetMemoizationForIndex(k_memoizedCellsCount/2);
   Ion::Storage::Record record = modelStore()->recordAtIndex(modelIndexForRow(selectedRow()));
   Sequence * sequence = modelStore()->modelForRecord(record);
-  Ion::Storage::Record::ErrorStatus error = firstInitialCondition? sequence->setFirstInitialConditionContent(text) : sequence->setSecondInitialConditionContent(text);
+  Context * context = App::app()->localContext();
+  Ion::Storage::Record::ErrorStatus error = firstInitialCondition? sequence->setFirstInitialConditionContent(text, context) : sequence->setSecondInitialConditionContent(text, context);
   return (error == Ion::Storage::Record::ErrorStatus::None);
 }
 
@@ -265,19 +265,19 @@ void ListController::reinitSelectedExpression(ExpiringPointer<ExpressionModelHan
       if (sequence->firstInitialConditionExpressionClone().isUninitialized()) {
         return;
       }
-      sequence->setFirstInitialConditionContent("");
+      sequence->setFirstInitialConditionContent("", nullptr); // No context needed here
       break;
     case 2:
       if (sequence->secondInitialConditionExpressionClone().isUninitialized()) {
         return;
       }
-      sequence->setSecondInitialConditionContent("");
+      sequence->setSecondInitialConditionContent("", nullptr); // No context needed here
       break;
     default:
       if (sequence->expressionClone().isUninitialized()) {
         return;
       }
-      sequence->setContent("");
+      sequence->setContent("", nullptr); // No context needed
       break;
   }
   selectableTableView()->reloadData();

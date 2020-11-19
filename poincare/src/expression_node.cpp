@@ -32,24 +32,23 @@ int ExpressionNode::polynomialDegree(Context * context, const char * symbolName)
   return 0;
 }
 
-int ExpressionNode::getPolynomialCoefficients(Context * context, const char * symbolName, Expression coefficients[]) const {
+int ExpressionNode::getPolynomialCoefficients(Context * context, const char * symbolName, Expression coefficients[], ExpressionNode::SymbolicComputation symbolicComputation) const {
   return Expression(this).defaultGetPolynomialCoefficients(context, symbolName, coefficients);
 }
 
-Expression ExpressionNode::shallowReplaceReplaceableSymbols(Context * context) {
-  return Expression(this).defaultReplaceReplaceableSymbols(context);
+Expression ExpressionNode::deepReplaceReplaceableSymbols(Context * context, bool * didReplace, bool replaceFunctionsOnly, int parameteredAncestorsCount) {
+  return Expression(this).defaultReplaceReplaceableSymbols(context, didReplace, replaceFunctionsOnly, parameteredAncestorsCount);
 }
 
-int ExpressionNode::getVariables(Context * context, isVariableTest isVariable, char * variables, int maxSizeVariable) const {
- int numberOfVariables = 0;
+int ExpressionNode::getVariables(Context * context, isVariableTest isVariable, char * variables, int maxSizeVariable, int nextVariableIndex) const {
   for (ExpressionNode * c : children()) {
-   int n = c->getVariables(context, isVariable, variables, maxSizeVariable);
-   if (n < 0) {
-     return n;
-   }
-   numberOfVariables = n > numberOfVariables ? n : numberOfVariables;
- }
- return numberOfVariables;
+    int n = c->getVariables(context, isVariable, variables, maxSizeVariable, nextVariableIndex);
+    if (n < 0) {
+      return n;
+    }
+    nextVariableIndex = n;
+  }
+  return nextVariableIndex;
 }
 
 float ExpressionNode::characteristicXRange(Context * context, Preferences::AngleUnit angleUnit) const {
@@ -68,30 +67,42 @@ float ExpressionNode::characteristicXRange(Context * context, Preferences::Angle
   return range;
 }
 
-int ExpressionNode::SimplificationOrder(const ExpressionNode * e1, const ExpressionNode * e2, bool ascending, bool canBeInterrupted) {
-  if (e1->type() > e2->type()) {
+int ExpressionNode::SimplificationOrder(const ExpressionNode * e1, const ExpressionNode * e2, bool ascending, bool canBeInterrupted, bool ignoreParentheses) {
+  // Depending on ignoreParentheses, check if e1 or e2 are parenthesis
+  ExpressionNode::Type type1 = e1->type();
+  if (ignoreParentheses && type1 == Type::Parenthesis) {
+    if (canBeInterrupted && Expression::ShouldStopProcessing()) {
+      return -1;
+    }
+    return SimplificationOrder(e1->childAtIndex(0), e2, ascending, canBeInterrupted, ignoreParentheses);
+  }
+  ExpressionNode::Type type2 = e2->type();
+  if (ignoreParentheses && type2 == Type::Parenthesis) {
+    return SimplificationOrder(e1, e2->childAtIndex(0), ascending, canBeInterrupted, ignoreParentheses);
+  }
+  if (type1 > type2) {
     if (canBeInterrupted && Expression::ShouldStopProcessing()) {
       return 1;
     }
-    return -(e2->simplificationOrderGreaterType(e1, ascending, canBeInterrupted));
-  } else if (e1->type() == e2->type()) {
-    return e1->simplificationOrderSameType(e2, ascending, canBeInterrupted);
+    return -(e2->simplificationOrderGreaterType(e1, ascending, canBeInterrupted, ignoreParentheses));
+  } else if (type1 == type2) {
+    return e1->simplificationOrderSameType(e2, ascending, canBeInterrupted, ignoreParentheses);
   } else {
     if (canBeInterrupted && Expression::ShouldStopProcessing()) {
       return -1;
     }
-    return e1->simplificationOrderGreaterType(e2, ascending, canBeInterrupted);
+    return e1->simplificationOrderGreaterType(e2, ascending, canBeInterrupted, ignoreParentheses);
   }
 }
 
-int ExpressionNode::simplificationOrderSameType(const ExpressionNode * e, bool ascending, bool canBeInterrupted) const {
+int ExpressionNode::simplificationOrderSameType(const ExpressionNode * e, bool ascending, bool canBeInterrupted, bool ignoreParentheses) const {
   int index = 0;
   for (ExpressionNode * c : children()) {
     // The NULL node is the least node type.
     if (e->numberOfChildren() <= index) {
       return 1;
     }
-    int childIOrder = SimplificationOrder(c, e->childAtIndex(index), ascending, canBeInterrupted);
+    int childIOrder = SimplificationOrder(c, e->childAtIndex(index), ascending, canBeInterrupted, ignoreParentheses);
     if (childIOrder != 0) {
       return childIOrder;
     }
@@ -123,6 +134,10 @@ bool ExpressionNode::isOfType(Type * types, int length) const {
     }
   }
   return false;
+}
+
+Expression ExpressionNode::removeUnit(Expression * unit) {
+  return Expression(this);
 }
 
 void ExpressionNode::setChildrenInPlace(Expression other) {

@@ -25,9 +25,10 @@ bool NAryExpressionNode::childAtIndexNeedsUserParentheses(const Expression & chi
 
 void NAryExpressionNode::sortChildrenInPlace(ExpressionOrder order, Context * context, bool canSwapMatrices, bool canBeInterrupted) {
   Expression reference(this);
-  for (int i = 1; i < reference.numberOfChildren(); i++) {
+  const int childrenCount = reference.numberOfChildren();
+  for (int i = 1; i < childrenCount; i++) {
     bool isSorted = true;
-    for (int j = 0; j < reference.numberOfChildren()-1; j++) {
+    for (int j = 0; j < childrenCount-1; j++) {
       /* Warning: Matrix operations are not always commutative (ie,
        * multiplication) so we never swap 2 matrices. */
       ExpressionNode * cj = childAtIndex(j);
@@ -60,7 +61,7 @@ Expression NAryExpressionNode::squashUnaryHierarchyInPlace() {
 
 // Private
 
-int NAryExpressionNode::simplificationOrderSameType(const ExpressionNode * e, bool ascending, bool canBeInterrupted) const {
+int NAryExpressionNode::simplificationOrderSameType(const ExpressionNode * e, bool ascending, bool canBeInterrupted, bool ignoreParentheses) const {
   int m = numberOfChildren();
   int n = e->numberOfChildren();
   for (int i = 1; i <= m; i++) {
@@ -68,7 +69,7 @@ int NAryExpressionNode::simplificationOrderSameType(const ExpressionNode * e, bo
     if (n < i) {
       return 1;
     }
-    int order = SimplificationOrder(childAtIndex(m-i), e->childAtIndex(n-i), ascending, canBeInterrupted);
+    int order = SimplificationOrder(childAtIndex(m-i), e->childAtIndex(n-i), ascending, canBeInterrupted, ignoreParentheses);
     if (order != 0) {
       return order;
     }
@@ -80,13 +81,13 @@ int NAryExpressionNode::simplificationOrderSameType(const ExpressionNode * e, bo
   return 0;
 }
 
-int NAryExpressionNode::simplificationOrderGreaterType(const ExpressionNode * e, bool ascending, bool canBeInterrupted) const {
+int NAryExpressionNode::simplificationOrderGreaterType(const ExpressionNode * e, bool ascending, bool canBeInterrupted, bool ignoreParentheses) const {
   int m = numberOfChildren();
   if (m == 0) {
     return -1;
   }
   /* Compare e to last term of hierarchy. */
-  int order = SimplificationOrder(childAtIndex(m-1), e, ascending, canBeInterrupted);
+  int order = SimplificationOrder(childAtIndex(m-1), e, ascending, canBeInterrupted, ignoreParentheses);
   if (order != 0) {
     return order;
   }
@@ -94,6 +95,21 @@ int NAryExpressionNode::simplificationOrderGreaterType(const ExpressionNode * e,
     return ascending ? 1 : -1;
   }
   return 0;
+}
+
+void NAryExpression::mergeSameTypeChildrenInPlace() {
+  // Multiplication is associative: a*(b*c)->a*b*c
+  // The same goes for Addition
+  ExpressionNode::Type parentType = type();
+  int i = 0;
+  while (i < numberOfChildren()) {
+    Expression c = childAtIndex(i);
+    if (c.type() != parentType) {
+      i++;
+    } else {
+      mergeChildrenAtIndexInPlace(c, i);
+    }
+  }
 }
 
 int NAryExpression::allChildrenAreReal(Context * context) const {

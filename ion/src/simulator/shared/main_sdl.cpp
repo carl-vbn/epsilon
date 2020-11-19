@@ -1,9 +1,10 @@
 #include "main.h"
 #include "display.h"
-#include "platform.h"
-#if !EPSILON_SDL_SCREEN_ONLY
+#include "haptics.h"
 #include "layout.h"
-#endif
+#include "platform.h"
+#include "telemetry.h"
+#include "random.h"
 
 #include <assert.h>
 #include <ion.h>
@@ -25,12 +26,21 @@ int main(int argc, char * argv[]) {
     arguments.push_back(language);
   }
 
-  IonSimulatorTelemetryInit();
+  // Init
+#if EPSILON_TELEMETRY
+  Ion::Simulator::Telemetry::init();
+#endif
   Ion::Simulator::Main::init();
-  IonSimulatorTelemetryEvent("Calculator");
+  Ion::Simulator::Haptics::init();
+
   ion_main(arguments.size(), &arguments[0]);
+
+  // Shutdown
+  Ion::Simulator::Haptics::shutdown();
   Ion::Simulator::Main::quit();
-  IonSimulatorTelemetryDeinit();
+#if EPSILON_TELEMETRY
+  Ion::Simulator::Telemetry::shutdown();
+#endif
 
   return 0;
 }
@@ -41,9 +51,6 @@ namespace Main {
 
 static SDL_Window * sWindow = nullptr;
 static SDL_Renderer * sRenderer = nullptr;
-#if !EPSILON_SDL_SCREEN_ONLY
-static SDL_Texture * sBackgroundTexture = nullptr;
-#endif
 static bool sNeedsRefresh = false;
 #if EPSILON_SDL_SCREEN_ONLY
 static SDL_Rect sScreenRect;
@@ -54,6 +61,8 @@ void init() {
     SDL_Log("Could not init video");
     return;
   }
+
+  Random::init();
 
   sWindow = SDL_CreateWindow(
     "Epsilon",
@@ -66,7 +75,7 @@ void init() {
     Ion::Display::Height,
     0 // Default flags: no high-dpi, not resizeable.
 #else
-    290, 555, // Otherwise use a default size that matches the whole calculator
+    458, 888, // Otherwise use a default size that makes the screen pixel-perfect
     SDL_WINDOW_ALLOW_HIGHDPI
 #if EPSILON_SDL_FULLSCREEN
     | SDL_WINDOW_FULLSCREEN
@@ -87,9 +96,8 @@ void init() {
   assert(sRenderer);
 
   Display::init(sRenderer);
-
 #if !EPSILON_SDL_SCREEN_ONLY
-  sBackgroundTexture = IonSimulatorLoadImage(sRenderer, "background.jpg");
+  Layout::init(sRenderer);
 #endif
 
   relayout();
@@ -108,11 +116,6 @@ void relayout() {
   sScreenRect.h = windowHeight;
 #else
   Layout::recompute(windowWidth, windowHeight);
-  SDL_Rect backgroundRect;
-  Layout::getBackgroundRect(&backgroundRect);
-
-  SDL_RenderCopy(sRenderer, sBackgroundTexture, nullptr, &backgroundRect);
-  SDL_RenderPresent(sRenderer);
 #endif
 
   setNeedsRefresh();
@@ -126,26 +129,30 @@ void refresh() {
   if (!sNeedsRefresh) {
     return;
   }
+  sNeedsRefresh = false;
+
 #if EPSILON_SDL_SCREEN_ONLY
   Display::draw(sRenderer, &sScreenRect);
 #else
   SDL_Rect screenRect;
   Layout::getScreenRect(&screenRect);
-  SDL_Rect backgroundRect;
-  Layout::getBackgroundRect(&backgroundRect);
 
   SDL_SetRenderDrawColor(sRenderer, 194, 194, 194, 255);
   SDL_RenderClear(sRenderer);
-  SDL_RenderCopy(sRenderer, sBackgroundTexture, nullptr, &backgroundRect);
+  // Can change sNeedsRefresh state if a key is highlighted and needs to be reset
+  Layout::draw(sRenderer);
   Display::draw(sRenderer, &screenRect);
 #endif
   SDL_RenderPresent(sRenderer);
-  sNeedsRefresh = false;
 
   IonSimulatorCallbackDidRefresh();
 }
 
 void quit() {
+#if !EPSILON_SDL_SCREEN_ONLY
+  Layout::quit();
+#endif
+  Display::quit();
   SDL_DestroyWindow(sWindow);
   SDL_Quit();
 }

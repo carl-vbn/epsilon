@@ -11,7 +11,7 @@ public:
   EditableTextCell * editableTextCell();
   void setEven(bool even) override;
   void setHighlighted(bool highlight) override;
-  virtual Responder * responder() override {
+  Responder * responder() override {
     return this;
   }
   const char * text() const override {
@@ -21,7 +21,7 @@ public:
 private:
   int numberOfSubviews() const override;
   View * subviewAtIndex(int index) override;
-  void layoutSubviews() override;
+  void layoutSubviews(bool force = false) override;
   EditableTextCell m_editableCell;
 };
 

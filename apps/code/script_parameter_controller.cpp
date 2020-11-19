@@ -42,7 +42,7 @@ bool ScriptParameterController::handleEvent(Ion::Events::Event event) {
         m_menuController->renameSelectedScript();
         return true;
       case 2:
-        m_script.toggleImportationStatus();
+        m_script.toggleAutoimportationStatus();
         m_selectableTableView.reloadData();
         m_menuController->reloadConsole();
         Container::activeApp()->setFirstResponder(&m_selectableTableView);
@@ -61,6 +61,7 @@ bool ScriptParameterController::handleEvent(Ion::Events::Event event) {
 }
 
 void ScriptParameterController::viewWillAppear() {
+  ViewController::viewWillAppear();
   m_selectableTableView.reloadData();
   m_selectableTableView.selectCellAtLocation(0,0);
 }
@@ -80,7 +81,7 @@ HighlightCell * ScriptParameterController::reusableCell(int index) {
 void ScriptParameterController::willDisplayCellForIndex(HighlightCell * cell, int index) {
   if (cell == &m_autoImportScript) {
     SwitchView * switchView = (SwitchView *)m_autoImportScript.accessoryView();
-    switchView->setState(m_script.importationStatus());
+    switchView->setState(m_script.autoImportationStatus());
   }
 }
 

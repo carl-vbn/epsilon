@@ -16,8 +16,9 @@ public:
   void push(ViewController * vc, KDColor textColor = Palette::SubTab, KDColor backgroundColor = KDColorWhite, KDColor separatorColor = Palette::GreyBright);
   void pop();
 
-  int depth();
-  View * view() override;
+  int depth() const { return m_numberOfChildren; }
+  View * view() override { return &m_view; }
+  ViewController * topViewController();
   const char * title() override;
   bool handleEvent(Ion::Events::Event event) override;
   void didBecomeFirstResponder() override;
@@ -57,7 +58,7 @@ private:
   private:
     int numberOfSubviews() const override;
     View * subviewAtIndex(int index) override;
-    void layoutSubviews() override;
+    void layoutSubviews(bool force = false) override;
 
     StackView m_stackViews[kMaxNumberOfStacks];
     View * m_contentView;

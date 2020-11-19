@@ -16,7 +16,10 @@ class StorageDelegate;
 class Storage {
 public:
   typedef uint16_t record_size_t;
-  constexpr static size_t k_storageSize = 16384;
+
+  constexpr static size_t k_storageSize = 32768;
+  static_assert(UINT16_MAX >= k_storageSize, "record_size_t not big enough");
+
   static Storage * sharedStorage();
   constexpr static char k_dotChar = '.';
 
@@ -83,13 +86,13 @@ public:
     uint32_t m_fullNameCRC32;
   };
 
-  Storage();
-
 #if ION_STORAGE_LOG
   void log();
 #endif
 
   size_t availableSize();
+  size_t putAvailableSpaceAtEndOfRecord(Record r);
+  void getAvailableSpaceFromEndOfRecord(Record r, size_t recordAvailableSpace);
   uint32_t checksum();
 
   // Delegate
@@ -105,10 +108,12 @@ public:
   Record::ErrorStatus createRecordWithExtension(const char * baseName, const char * extension, const void * data, size_t size);
 
   // Record getters
+  bool hasRecord(Record r) { return pointerOfRecord(r) != nullptr; }
   Record recordWithExtensionAtIndex(const char * extension, int index);
   Record recordNamed(const char * fullName);
   Record recordBaseNamedWithExtension(const char * baseName, const char * extension);
   Record recordBaseNamedWithExtensions(const char * baseName, const char * const extension[], size_t numberOfExtensions);
+  const char * extensionOfRecordBaseNamedWithExtensions(const char * baseName, int baseNameLength, const char * const extension[], size_t numberOfExtensions);
 
   // Record destruction
   void destroyAllRecords();
@@ -118,6 +123,8 @@ public:
 private:
   constexpr static uint32_t Magic = 0xEE0BDDBA;
   constexpr static size_t k_maxRecordSize = (1 << sizeof(record_size_t)*8);
+
+  Storage();
 
   /* Getters/Setters on recordID */
   const char * fullNameOfRecord(const Record record);
@@ -163,7 +170,9 @@ private:
     }
     return RecordIterator((char *)m_buffer);
   };
-  RecordIterator end() const { return RecordIterator(nullptr); };
+  RecordIterator end() const { return RecordIterator(nullptr); }
+
+  Record privateRecordAndExtensionOfRecordBaseNamedWithExtensions(const char * baseName, const char * const extensions[], size_t numberOfExtensions, const char * * extensionResult = nullptr, int baseNameLength = -1);
 
   uint32_t m_magicHeader;
   char m_buffer[k_storageSize];

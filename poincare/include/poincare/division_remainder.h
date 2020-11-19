@@ -3,6 +3,7 @@
 
 #include <poincare/approximation_helper.h>
 #include <poincare/expression.h>
+#include <poincare/integer.h>
 
 namespace Poincare {
 
@@ -13,7 +14,7 @@ public:
   size_t size() const override { return sizeof(DivisionRemainderNode); }
   int numberOfChildren() const override;
 #if POINCARE_TREE_LOG
-  virtual void logNodeName(std::ostream & stream) const override {
+  void logNodeName(std::ostream & stream) const override {
     stream << "DivisionRemainder";
   }
 #endif
@@ -41,11 +42,12 @@ private:
 class DivisionRemainder final : public Expression {
 public:
   DivisionRemainder(const DivisionRemainderNode * n) : Expression(n) {}
-  static DivisionRemainder Builder(Expression child0, Expression child1) { return TreeHandle::FixedArityBuilder<DivisionRemainder, DivisionRemainderNode>(ArrayBuilder<TreeHandle>(child0, child1).array(), 2); }
+  static DivisionRemainder Builder(Expression child0, Expression child1) { return TreeHandle::FixedArityBuilder<DivisionRemainder, DivisionRemainderNode>({child0, child1}); }
   static constexpr Expression::FunctionHelper s_functionHelper = Expression::FunctionHelper("rem", 2, &UntypedBuilderTwoChildren<DivisionRemainder>);
 
   // Expression
   Expression shallowReduce(Context * context);
+  static Expression Reduce(const Integer & a, const Integer & b);
 };
 
 }

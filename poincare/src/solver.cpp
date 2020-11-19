@@ -133,12 +133,12 @@ double Solver::BrentRoot(double ax, double bx, double precision, ValueAtAbscissa
     double xm = 0.5*(c-b);
     if (std::fabs(xm) <= tol1 || fb == 0.0) {
       double fbcMiddle = evaluation(0.5*(b+c), context, complexFormat, angleUnit, context1, context2, context3);
-      double isContinuous = (fb <= fbcMiddle && fbcMiddle <= fc) || (fc <= fbcMiddle && fbcMiddle <= fb);
+      bool isContinuous = (fb <= fbcMiddle && fbcMiddle <= fc) || (fc <= fbcMiddle && fbcMiddle <= fb);
       if (isContinuous) {
         return b;
       }
     }
-    if (std::fabs(e) >= tol1 && std::fabs(fa) > std::fabs(b)) {
+    if (std::fabs(e) >= tol1 && std::fabs(fa) > std::fabs(fb)) {
       double s = fb/fa;
       double p = 2.0*xm*s;
       double q = 1.0-s;
@@ -168,7 +168,7 @@ double Solver::BrentRoot(double ax, double bx, double precision, ValueAtAbscissa
     if (std::fabs(d) > tol1) {
       b += d;
     } else {
-      b += xm > 0.0 ? tol1 : tol1;
+      b += xm > 0.0 ? tol1 : -tol1;
     }
     fb = evaluation(b, context, complexFormat, angleUnit, context1, context2, context3);
   }
@@ -230,11 +230,11 @@ T Solver::CumulativeDistributiveInverseForNDefinedFunction(T * probability, Valu
   do {
     delta = std::fabs(*probability-p);
     p += evaluation(k++, context, complexFormat, angleUnit, context1, context2, context3);
-    if (p >= k_maxProbability && std::fabs(*probability-1.0) <= delta) {
+    if (p >= k_maxProbability && std::fabs(*probability-(T)1.0) <= delta) {
       *probability = (T)1.0;
       return (T)(k-1);
     }
-  } while (std::fabs(*probability-p) <= delta && k < k_maxNumberOfOperations && p < 1.0);
+  } while (std::fabs(*probability-p) <= delta && k < k_maxNumberOfOperations && p < (T)1.0);
   p -= evaluation(--k, context, complexFormat, angleUnit, context1, context2, context3);
   if (k == k_maxNumberOfOperations) {
     *probability = (T)1.0;

@@ -10,6 +10,9 @@ SFLAGS += -Iion/src/simulator/web/include
 # Only render the screen, not the whole calculator which will be drawn in HTML
 SFLAGS += -DEPSILON_SDL_SCREEN_ONLY=1
 
+# Enable to set environment variables for a module
+LDFLAGS += --pre-js ion/src/simulator/web/preamble_env.js
+
 ion_src += $(addprefix ion/src/simulator/web/, \
   callback.cpp \
   helpers.cpp \
@@ -17,17 +20,25 @@ ion_src += $(addprefix ion/src/simulator/web/, \
 
 ion_src += $(addprefix ion/src/simulator/shared/, \
   dummy/language.cpp \
-  dummy/telemetry.cpp \
+  dummy/haptics_enabled.cpp \
+  haptics.cpp \
 )
 
-DEFAULT = $(BUILD_DIR)/simulator.zip
+ion_src += ion/src/shared/collect_registers.cpp
 
-$(BUILD_DIR)/simulator.zip: $(BUILD_DIR)/epsilon.packed.js
+ifeq ($(EPSILON_TELEMETRY),1)
+ion_src += ion/src/simulator/shared/dummy/telemetry_init.cpp
+ion_src += ion/src/shared/telemetry_console.cpp
+endif
+
+DEFAULT = epsilon.zip
+
+$(BUILD_DIR)/epsilon%zip: $(BUILD_DIR)/epsilon%js $(BUILD_DIR)/ion/src/simulator/web/simulator.html
 	@rm -rf $(basename $@)
 	@mkdir -p $(basename $@)
-	@cp $^ $(basename $@)/epsilon.js
+	@cp $< $(basename $@)/epsilon.js
 	@cp ion/src/simulator/assets/background.jpg $(basename $@)/
-	@cp ion/src/simulator/web/simulator.html $(basename $@)/
+	@cp $(BUILD_DIR)/ion/src/simulator/web/simulator.html $(basename $@)/
 	$(call rule_label,ZIP)
 	@zip -r -9 -j $@ $(basename $@) > /dev/null
 	@rm -rf $(basename $@)

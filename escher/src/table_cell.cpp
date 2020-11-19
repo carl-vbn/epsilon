@@ -1,8 +1,10 @@
 #include <escher/table_cell.h>
 #include <escher/palette.h>
 #include <escher/metric.h>
+#include <algorithm>
 
 TableCell::TableCell(Layout layout) :
+  Bordered(),
   HighlightCell(),
   m_layout(layout)
 {
@@ -38,77 +40,131 @@ View * TableCell::subviewAtIndex(int index) {
  * margins (like ExpressionView), sometimes the subview has no margins (like
  * MessageView) which prevents us to handle margins only here. */
 
-void TableCell::layoutSubviews() {
+KDCoordinate withMargin(KDCoordinate length, KDCoordinate margin) {
+  return length == 0 ? 0 : length + margin;
+}
+
+void TableCell::layoutSubviews(bool force) {
+  /* TODO: this code is awful. However, this should handle multiples cases
+   * (subviews are not defined, margins are overriden...) */
   KDCoordinate width = bounds().width();
   KDCoordinate height = bounds().height();
   View * label = labelView();
-  KDSize labelSize = label ? label->minimalSizeForOptimalDisplay() : KDSizeZero;
-  if (label) {
-    switch (m_layout) {
-      case Layout::Vertical:
-        label->setFrame(KDRect(
-              k_separatorThickness+k_labelMargin,
-              k_separatorThickness+Metric::TableCellLabelTopMargin,
-              width-2*k_separatorThickness-k_labelMargin,
-              labelSize.height()));
-        break;
-      default:
-        label->setFrame(KDRect(
-              k_separatorThickness+k_labelMargin,
-              k_separatorThickness,
-              labelSize.width(),
-              height - 2*k_separatorThickness));
-        break;
-    }
-  }
   View * accessory = accessoryView();
-  if (accessory) {
-    KDSize accessorySize = accessory->minimalSizeForOptimalDisplay();
-    switch (m_layout) {
-      case Layout::Vertical:
-        accessory->setFrame(KDRect(
-              k_separatorThickness+k_accessoryMargin,
-              height-k_separatorThickness-accessorySize.height()-k_accessoryBottomMargin,
-              width-2*k_separatorThickness - k_accessoryMargin,
-              accessorySize.height()));
-        break;
-      default:
-        // In some cases, the accessory view cannot take all the size it can
-        KDCoordinate wantedX = width-accessorySize.width()-k_separatorThickness-k_accessoryMargin;
-        KDCoordinate minX = label ? label->bounds().x()+labelSize.width()+k_labelMargin+k_separatorThickness+k_accessoryMargin : k_accessoryMargin;
-        if (minX < wantedX) {
-          accessory->setFrame(KDRect(
-                wantedX,
-                k_separatorThickness,
-                accessorySize.width(),
-                height-2*k_separatorThickness));
-        } else {
-          accessory->setFrame(KDRect(
-                minX,
-                k_separatorThickness,
-                accessorySize.width(),
-                height-2*k_separatorThickness));
-        }
-        break;
-    }
-  }
   View * subAccessory = subAccessoryView();
-  if (subAccessory && accessory) {
-    KDSize accessorySize = accessory->minimalSizeForOptimalDisplay();
-    KDSize subAccessorySize = subAccessory->minimalSizeForOptimalDisplay();
-    subAccessory->setFrame(KDRect(width-k_separatorThickness-k_accessoryMargin-accessorySize.width()-subAccessorySize.width(), k_separatorThickness,
-      subAccessorySize.width(), height-2*k_separatorThickness));
+  KDSize labelSize = label ? label->minimalSizeForOptimalDisplay() : KDSizeZero;
+  KDSize accessorySize = accessory ? accessory->minimalSizeForOptimalDisplay() : KDSizeZero;
+  KDSize subAccessorySize = subAccessory ? subAccessory->minimalSizeForOptimalDisplay() : KDSizeZero;
+  if (m_layout == Layout::Vertical) {
+    /*
+     * Vertically:
+     * ----------------
+     * ----------------
+     * Line separator
+     * ----------------
+     * k_verticalMargin
+     * ----------------
+     *     LABEL
+     * ----------------
+     * k_verticalMargin
+     * ----------------
+     *       .
+     *       . [White space if possible, otherwise LABEL overlaps SUBACCESSORY and so on]
+     *       .
+     * ----------------
+     *  SUBACCESSORY
+     * ----------------
+     *   ACCESSORY
+     * ----------------
+     * k_verticalMargin
+     * ----------------
+     * Line separator
+     * ----------------
+     * ----------------
+     *
+     *
+     *  Horizontally:
+     * || Line separator | margin* | SUBVIEW | margin* | Line separator ||
+     *
+     * * = margin can either be labelMargin(), accessoryMargin() or k_horizontalMargin depending on the subview
+     *
+     * */
+    KDCoordinate horizontalMargin = k_separatorThickness + labelMargin();
+    KDCoordinate y = k_separatorThickness;
+    if (label) {
+      y += k_verticalMargin;
+      KDCoordinate labelHeight = std::min<KDCoordinate>(labelSize.height(), height - y - k_separatorThickness - k_verticalMargin);
+      label->setFrame(KDRect(horizontalMargin, y, width-2*horizontalMargin, labelHeight), force);
+      y += labelHeight + k_verticalMargin;
+    }
+    horizontalMargin = k_separatorThickness + k_horizontalMargin;
+    y = std::max<KDCoordinate>(y, height - k_separatorThickness - withMargin(accessorySize.height(), k_verticalMargin) - withMargin(subAccessorySize.height(), 0));
+    if (subAccessory) {
+      KDCoordinate subAccessoryHeight = std::min<KDCoordinate>(subAccessorySize.height(), height - y - k_separatorThickness - k_verticalMargin);
+      accessory->setFrame(KDRect(horizontalMargin, y, width - 2*horizontalMargin, subAccessoryHeight), force);
+      y += subAccessoryHeight;
+    }
+    horizontalMargin = k_separatorThickness + accessoryMargin();
+    y = std::max<KDCoordinate>(y, height - k_separatorThickness - withMargin(accessorySize.height(), k_verticalMargin));
+    if (accessory) {
+      KDCoordinate accessoryHeight = std::min<KDCoordinate>(accessorySize.height(), height - y - k_separatorThickness - k_verticalMargin);
+      accessory->setFrame(KDRect(horizontalMargin, y, width - 2*horizontalMargin, accessoryHeight), force);
+    }
+  } else {
+    /*
+     * Vertically:
+     * ----------------
+     * ----------------
+     * Line separator
+     * ----------------
+     *    SUBVIEW
+     * ----------------
+     * Line separator
+     * ----------------
+     * ----------------
+     *
+     *  Horizontally:
+     * || Line separator | Label margin | LABEL | Label margin | ...
+     *      [ White space if possible otherwise the overlap can be from left to
+     *      right subviews or the contrary ]
+     *
+     *  ... | SUBACCESSORY | ACCESSORY | Accessory margin | Line separator ||
+     *
+     * */
+
+    KDCoordinate verticalMargin = k_separatorThickness;
+    KDCoordinate x = 0;
+    KDCoordinate labelX = k_separatorThickness + labelMargin();
+    KDCoordinate subAccessoryX = std::max(k_separatorThickness + k_horizontalMargin, width - k_separatorThickness - withMargin(accessorySize.width(), accessoryMargin()) - withMargin(subAccessorySize.width(), 0));
+    KDCoordinate accessoryX = std::max(k_separatorThickness + accessoryMargin(), width - k_separatorThickness - withMargin(accessorySize.width(), accessoryMargin()));
+    if (label) {
+      x = labelX;
+      KDCoordinate labelWidth = std::min<KDCoordinate>(labelSize.width(), width - x - k_separatorThickness - labelMargin());
+      if (m_layout == Layout::HorizontalRightOverlap) {
+        labelWidth = std::min<KDCoordinate>(labelWidth, subAccessoryX - x - labelMargin());
+      }
+      label->setFrame(KDRect(x, verticalMargin, labelWidth, height-2*verticalMargin), force);
+      x += labelWidth + labelMargin();
+    }
+    if (subAccessory) {
+      x = std::max(x, subAccessoryX);
+      KDCoordinate subAccessoryWidth = std::min<KDCoordinate>(subAccessorySize.width(), width - x - k_separatorThickness - k_horizontalMargin);
+      if (m_layout == Layout::HorizontalRightOverlap) {
+        subAccessoryWidth = std::min<KDCoordinate>(subAccessoryWidth, accessoryX - x);
+      }
+      subAccessory->setFrame(KDRect(x, verticalMargin, subAccessoryWidth, height-2*verticalMargin), force);
+      x += subAccessoryWidth;
+    }
+    if (accessory) {
+      x = std::max(x, accessoryX);
+      KDCoordinate accessoryWidth = std::min<KDCoordinate>(accessorySize.width(), width - x - k_separatorThickness - accessoryMargin());
+      accessory->setFrame(KDRect(x, verticalMargin, accessoryWidth, height-2*verticalMargin), force);
+    }
   }
 }
 
 void TableCell::drawRect(KDContext * ctx, KDRect rect) const {
-  KDCoordinate width = bounds().width();
-  KDCoordinate height = bounds().height();
-  KDColor backgroundColor = isHighlighted() ? Palette::Select : KDColorWhite;
-  ctx->fillRect(KDRect(k_separatorThickness, k_separatorThickness, width-2*k_separatorThickness, height-k_separatorThickness), backgroundColor);
-  // Draw rectangle around cell
-  ctx->fillRect(KDRect(0, 0, width, k_separatorThickness), Palette::GreyBright);
-  ctx->fillRect(KDRect(0, k_separatorThickness, k_separatorThickness, height-k_separatorThickness), Palette::GreyBright);
-  ctx->fillRect(KDRect(width-k_separatorThickness, k_separatorThickness, k_separatorThickness, height-k_separatorThickness), Palette::GreyBright);
-  ctx->fillRect(KDRect(0, height-k_separatorThickness, width, k_separatorThickness), Palette::GreyBright);
- }
+  KDColor backColor = isHighlighted() ? Palette::Select : backgroundColor();
+  drawInnerRect(ctx, bounds(), backColor);
+  drawBorderOfRect(ctx, bounds(), Palette::GreyBright);
+}

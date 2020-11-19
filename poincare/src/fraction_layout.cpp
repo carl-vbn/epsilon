@@ -5,12 +5,11 @@
 #include <poincare/serialization_helper.h>
 #include <escher/metric.h>
 #include <assert.h>
+#include <algorithm>
 
 namespace Poincare {
 
-static inline KDCoordinate maxCoordinate(KDCoordinate x, KDCoordinate y) { return x > y ? x : y; }
-
-void FractionLayoutNode::moveCursorLeft(LayoutCursor * cursor, bool * shouldRecomputeLayout) {
+void FractionLayoutNode::moveCursorLeft(LayoutCursor * cursor, bool * shouldRecomputeLayout, bool forSelection) {
    if (cursor->position() == LayoutCursor::Position::Left
        && (cursor->layoutNode() == numeratorLayout()
          || cursor->layoutNode() == denominatorLayout()))
@@ -34,7 +33,7 @@ void FractionLayoutNode::moveCursorLeft(LayoutCursor * cursor, bool * shouldReco
   }
 }
 
-void FractionLayoutNode::moveCursorRight(LayoutCursor * cursor, bool * shouldRecomputeLayout) {
+void FractionLayoutNode::moveCursorRight(LayoutCursor * cursor, bool * shouldRecomputeLayout, bool forSelection) {
    if (cursor->position() == LayoutCursor::Position::Right
        && (cursor->layoutNode() == numeratorLayout()
          || cursor->layoutNode() == denominatorLayout()))
@@ -57,13 +56,21 @@ void FractionLayoutNode::moveCursorRight(LayoutCursor * cursor, bool * shouldRec
   }
 }
 
-void FractionLayoutNode::moveCursorUp(LayoutCursor * cursor, bool * shouldRecomputeLayout, bool equivalentPositionVisited) {
+/* Select up/down
+ *                    9876
+ * Take for instance ------. If there is no selection ongoing, moving the cursor
+ *                    123    up should put it left of the 1. If 123/456 is
+ *                   |---    selected, moving the cursor up to select up should
+ *                    456    put the cursor left of the 9.
+ * */
+
+void FractionLayoutNode::moveCursorUp(LayoutCursor * cursor, bool * shouldRecomputeLayout, bool equivalentPositionVisited, bool forSelection) {
   if (cursor->layoutNode()->hasAncestor(denominatorLayout(), true)) {
     // If the cursor is inside denominator, move it to the numerator.
     numeratorLayout()->moveCursorUpInDescendants(cursor, shouldRecomputeLayout);
     return;
   }
-  if (cursor->layoutNode() == this) {
+  if (cursor->layoutNode() == this && !forSelection) {
     // If the cursor is Left or Right, move it to the numerator.
     cursor->setLayoutNode(numeratorLayout());
     return;
@@ -71,13 +78,13 @@ void FractionLayoutNode::moveCursorUp(LayoutCursor * cursor, bool * shouldRecomp
   LayoutNode::moveCursorUp(cursor, shouldRecomputeLayout, equivalentPositionVisited);
 }
 
-void FractionLayoutNode::moveCursorDown(LayoutCursor * cursor, bool * shouldRecomputeLayout, bool equivalentPositionVisited) {
+void FractionLayoutNode::moveCursorDown(LayoutCursor * cursor, bool * shouldRecomputeLayout, bool equivalentPositionVisited, bool forSelection) {
   if (cursor->layoutNode()->hasAncestor(numeratorLayout(), true)) {
     // If the cursor is inside numerator, move it to the denominator.
     denominatorLayout()->moveCursorDownInDescendants(cursor, shouldRecomputeLayout);
     return;
   }
-  if (cursor->layoutNode() == this){
+  if (cursor->layoutNode() == this && !forSelection) {
     // If the cursor is Left or Right, move it to the denominator.
     cursor->setLayoutNode(denominatorLayout());
     return;
@@ -162,7 +169,7 @@ void FractionLayoutNode::didCollapseSiblings(LayoutCursor * cursor) {
 }
 
 KDSize FractionLayoutNode::computeSize() {
-  KDCoordinate width = maxCoordinate(numeratorLayout()->layoutSize().width(), denominatorLayout()->layoutSize().width())
+  KDCoordinate width = std::max(numeratorLayout()->layoutSize().width(), denominatorLayout()->layoutSize().width())
     + 2*Metric::FractionAndConjugateHorizontalOverflow+2*Metric::FractionAndConjugateHorizontalMargin;
   KDCoordinate height = numeratorLayout()->layoutSize().height()
     + k_fractionLineMargin + k_fractionLineHeight + k_fractionLineMargin
@@ -188,7 +195,7 @@ KDPoint FractionLayoutNode::positionOfChild(LayoutNode * child) {
   return KDPoint(x, y);
 }
 
-void FractionLayoutNode::render(KDContext * ctx, KDPoint p, KDColor expressionColor, KDColor backgroundColor) {
+void FractionLayoutNode::render(KDContext * ctx, KDPoint p, KDColor expressionColor, KDColor backgroundColor, Layout * selectionStart, Layout * selectionEnd, KDColor selectionColor) {
   KDCoordinate fractionLineY = p.y() + numeratorLayout()->layoutSize().height() + k_fractionLineMargin;
   ctx->fillRect(KDRect(p.x()+Metric::FractionAndConjugateHorizontalMargin, fractionLineY, layoutSize().width()-2*Metric::FractionAndConjugateHorizontalMargin, k_fractionLineHeight), expressionColor);
 }

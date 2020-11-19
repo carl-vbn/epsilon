@@ -1,4 +1,5 @@
 #include "trigonometric_model.h"
+#include <apps/regression/store.h>
 #include "../../shared/poincare_helpers.h"
 #include <poincare/addition.h>
 #include <poincare/layout_helper.h>
@@ -45,28 +46,44 @@ double TrigonometricModel::evaluate(double * modelCoefficients, double x) const 
 }
 
 double TrigonometricModel::partialDerivate(double * modelCoefficients, int derivateCoefficientIndex, double x) const {
+  if (derivateCoefficientIndex == 3) {
+    // Derivate with respect to d: 1
+    return 1.0;
+  }
+
   double a = modelCoefficients[0];
   double b = modelCoefficients[1];
   double c = modelCoefficients[2];
   double radianX = x * toRadians(Poincare::Preferences::sharedPreferences()->angleUnit());
+
   if (derivateCoefficientIndex == 0) {
-    // Derivate: sin(b*x+c)
-    return sin(b*radianX+c);
+    // Derivate with respect to a: sin(b*x+c)
+    return sin(b * radianX + c);
   }
   if (derivateCoefficientIndex == 1) {
-    // Derivate: x*a*cos(b*x+c);
-    return radianX*a*cos(b*radianX+c);
+    // Derivate with respect to b: x*a*cos(b*x+c);
+    return radianX * a * cos(b * radianX + c);
   }
-  if (derivateCoefficientIndex == 2) {
-    // Derivate: a*cos(b*x+c)
-    return a*cos(b*radianX+c);
+  assert(derivateCoefficientIndex == 2);
+  // Derivatewith respect to c: a*cos(b*x+c)
+  return a * cos(b * radianX + c);
+}
+
+void TrigonometricModel::specializedInitCoefficientsForFit(double * modelCoefficients, double defaultValue, Store * store, int series) const {
+  assert(store != nullptr && series >= 0 && series < Store::k_numberOfSeries && !store->seriesIsEmpty(series));
+  for (int i = 1; i < k_numberOfCoefficients - 1; i++) {
+    modelCoefficients[i] = defaultValue;
   }
-  if (derivateCoefficientIndex == 3) {
-    // Derivate: 1
-    return 1.0;
-  }
-  assert(false);
-  return 0.0;
+  /* We try a better initialization than the default value. We hope that this
+   * will improve the gradient descent to find correct coefficients.
+   *
+   * Init the "amplitude" coefficient. We take twice the standard deviation,
+   * because for a normal law, this interval contains 99.73% of the values. We
+   * do not take half of the apmlitude of the series, because this would be too
+   * dependant on outliers. */
+  modelCoefficients[0] = 3.0*store->standardDeviationOfColumn(series, 1);
+  // Init the "y delta" coefficient
+  modelCoefficients[k_numberOfCoefficients - 1] = store->meanOfColumn(series, 1);
 }
 
 Expression TrigonometricModel::expression(double * modelCoefficients) {

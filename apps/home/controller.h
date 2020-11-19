@@ -14,16 +14,17 @@ public:
 
   bool handleEvent(Ion::Events::Event event) override;
   void didBecomeFirstResponder() override;
-  void viewWillAppear() override;
+  TELEMETRY_ID("");
 
-  virtual int numberOfRows() const override;
-  virtual int numberOfColumns() const override;
-  virtual KDCoordinate cellHeight() override;
-  virtual KDCoordinate cellWidth() override;
-  virtual HighlightCell * reusableCell(int index) override;
-  virtual int reusableCellCount() const override;
+  int numberOfRows() const override;
+  int numberOfColumns() const override;
+  KDCoordinate cellHeight() override;
+  KDCoordinate cellWidth() override;
+  HighlightCell * reusableCell(int index) override;
+  int reusableCellCount() const override;
   void willDisplayCellAtLocation(HighlightCell * cell, int i, int j) override;
   void tableViewDidChangeSelection(SelectableTableView * t, int previousSelectedCellX, int previousSelectedCellY, bool withinTemporarySelection) override;
+  void tableViewDidChangeSelectionAndDidScroll(SelectableTableView * t, int previousSelectedCellX, int previousSelectedCellY, bool withinTemporarySelection) override;
 private:
   int numberOfIcons() const;
   SelectableTableViewDataSource * selectionDataSource() const;
@@ -36,7 +37,7 @@ private:
   private:
     int numberOfSubviews() const override;
     View * subviewAtIndex(int index) override;
-    void layoutSubviews() override;
+    void layoutSubviews(bool force = false) override;
     SelectableTableView m_selectableTableView;
   };
   static constexpr KDCoordinate k_sideMargin = 4;

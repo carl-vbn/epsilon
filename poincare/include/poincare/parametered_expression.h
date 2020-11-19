@@ -14,6 +14,10 @@ public:
   // Expression
   bool isParameteredExpression() const override { return true; }
   Expression replaceSymbolWithExpression(const SymbolAbstract & symbol, const Expression & expression) override;
+  Expression deepReplaceReplaceableSymbols(Context * context, bool * didReplace, bool replaceFunctionsOnly, int parameteredAncestorsCount) override;
+
+  // Expression properties
+  int getVariables(Context * context, isVariableTest isVariable, char * variables, int maxSizeVariable, int nextVariableIndex) const override;
 };
 
 class ParameteredExpression : public Expression {
@@ -34,6 +38,8 @@ public:
    * f(X)=diff(cos(x),x,X), X being an unknown. ReplaceUnknownInExpression does
    * that. */
   Expression replaceSymbolWithExpression(const SymbolAbstract & symbol, const Expression & expression);
+  Expression deepReplaceReplaceableSymbols(Context * context, bool * didReplace, bool replaceFunctionsOnly, int parameteredAncestorsCount);
+  Symbol parameter();
 protected:
   ParameteredExpression(const ParameteredExpressionNode * node) : Expression(node) {}
 };

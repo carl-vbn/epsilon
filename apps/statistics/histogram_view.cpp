@@ -8,10 +8,9 @@ using namespace Shared;
 namespace Statistics {
 
 HistogramView::HistogramView(HistogramController * controller, Store * store, int series, Shared::BannerView * bannerView, KDColor selectedHistogramColor, KDColor notSelectedHistogramColor, KDColor selectedBarColor) :
-  CurveView(store, nullptr, bannerView, nullptr),
+  HorizontallyLabeledCurveView(store, nullptr, bannerView, nullptr),
   m_controller(controller),
   m_store(store),
-  m_labels{},
   m_highlightedBarStart(NAN),
   m_highlightedBarEnd(NAN),
   m_series(series),
@@ -42,7 +41,7 @@ void HistogramView::drawRect(KDContext * ctx, KDRect rect) const {
   m_controller->setCurrentDrawnSeries(m_series);
   ctx->fillRect(rect, KDColorWhite);
   drawAxis(ctx, rect, Axis::Horizontal);
-  drawLabels(ctx, rect, Axis::Horizontal, false, !m_displayLabels);
+  drawLabelsAndGraduations(ctx, rect, Axis::Horizontal, false, !m_displayLabels);
   /* We memoize the total size to avoid recomputing it in double precision at
    * every call to EvaluateHistogramAtAbscissa() */
   float totalSize = m_store->sumOfOccurrences(m_series);
@@ -61,10 +60,6 @@ void HistogramView::setHighlight(float start, float end) {
     m_highlightedBarEnd = end;
     reloadSelectedBar();
   }
-}
-
-char * HistogramView::label(Axis axis, int index) const {
-  return axis == Axis::Vertical ? nullptr : (char *)m_labels[index];
 }
 
 float HistogramView::EvaluateHistogramAtAbscissa(float abscissa, void * model, void * context) {

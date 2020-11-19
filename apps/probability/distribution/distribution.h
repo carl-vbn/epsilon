@@ -18,7 +18,8 @@ public:
     ChiSquared,
     Student,
     Geometric,
-    Poisson
+    Poisson,
+    Fisher
   };
   virtual ~Distribution() = default;
   virtual I18n::Message title() = 0;
@@ -38,6 +39,7 @@ public:
   virtual double rightIntegralInverseForProbability(double * probability);
   virtual double evaluateAtDiscreteAbscissa(int k) const;
   constexpr static int k_maxNumberOfOperations = 1000000;
+  virtual double defaultComputedValue() const { return 0.0f; }
 protected:
   static_assert(Poincare::Preferences::LargeNumberOfSignificantDigits == 7, "k_maxProbability is ill-defined compared to LargeNumberOfSignificantDigits");
   constexpr static double k_maxProbability = 0.9999995;

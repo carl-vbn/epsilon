@@ -17,11 +17,11 @@ public:
   constexpr Event() : m_id(4*PageSize){} // Return Ion::Event::None by default
   constexpr Event(int i) : m_id(i){} // TODO: Assert here that i>=0 && i<255
 
-  uint8_t id() const { return m_id; }
-#if DEBUG
+  constexpr explicit operator uint8_t() const { return m_id; }
+#ifndef NDEBUG
   const char * name() const;
 #endif
-  Event(Keyboard::Key key, bool shift, bool alpha);
+  Event(Keyboard::Key key, bool shift, bool alpha, bool lock);
 
   bool operator==(const Event & other) const {
     return (m_id == other.m_id);
@@ -53,9 +53,14 @@ Event getEvent(int * timeout);
 
 ShiftAlphaStatus shiftAlphaStatus();
 void setShiftAlphaStatus(ShiftAlphaStatus s);
+void removeShift();
 bool isShiftActive();
 bool isAlphaActive();
+bool isLockActive();
+void setLongRepetition(bool longRepetition);
+bool isLongRepetition();
 void updateModifiersFromEvent(Event e);
+void didPressNewKey();
 
 // Plain
 
@@ -118,6 +123,8 @@ constexpr Event EXE = Event::PlainKey(Keyboard::Key::EXE);
 
 constexpr Event ShiftLeft  = Event::ShiftKey(Keyboard::Key::Left);
 constexpr Event ShiftRight = Event::ShiftKey(Keyboard::Key::Right);
+constexpr Event ShiftUp    = Event::ShiftKey(Keyboard::Key::Up);
+constexpr Event ShiftDown  = Event::ShiftKey(Keyboard::Key::Down);
 
 constexpr Event AlphaLock = Event::ShiftKey(Keyboard::Key::Alpha);
 constexpr Event Cut = Event::ShiftKey(Keyboard::Key::XNT);

@@ -5,7 +5,7 @@
 namespace Shared {
 
 ZoomParameterController::ZoomParameterController(Responder * parentResponder, InteractiveCurveViewRange * interactiveRange, CurveView * curveView) :
-  ViewController(parentResponder),
+  ZoomAndPanCurveViewController(parentResponder),
   m_contentView(curveView),
   m_interactiveRange(interactiveRange)
 {
@@ -15,46 +15,8 @@ const char * ZoomParameterController::title() {
   return I18n::translate(I18n::Message::Zoom);
 }
 
-View * ZoomParameterController::view() {
-  return &m_contentView;
-}
-
-bool ZoomParameterController::handleEvent(Ion::Events::Event event) {
-  if (event == Ion::Events::Plus) {
-    m_interactiveRange->zoom(2.0f/3.0f, m_interactiveRange->xCenter(), m_interactiveRange->yCenter());
-    m_contentView.curveView()->reload();
-    return true;
-  }
-  if (event == Ion::Events::Minus) {
-    m_interactiveRange->zoom(3.0f/2.0f, m_interactiveRange->xCenter(), m_interactiveRange->yCenter());
-    m_contentView.curveView()->reload();
-    return true;
-  }
-  if (event == Ion::Events::Up) {
-    m_interactiveRange->panWithVector(0.0f, m_interactiveRange->yGridUnit());
-    m_contentView.curveView()->reload();
-    return true;
-  }
-  if (event == Ion::Events::Down) {
-    m_interactiveRange->panWithVector(0.0f, -m_interactiveRange->yGridUnit());
-    m_contentView.curveView()->reload();
-    return true;
-  }
-  if (event == Ion::Events::Left) {
-    m_interactiveRange->panWithVector(-m_interactiveRange->xGridUnit(), 0.0f);
-    m_contentView.curveView()->reload();
-    return true;
-  }
-  if (event == Ion::Events::Right) {
-    m_interactiveRange->panWithVector(m_interactiveRange->xGridUnit(), 0.0f);
-    m_contentView.curveView()->reload();
-    return true;
-  }
-
-  return false;
-}
-
 void ZoomParameterController::viewWillAppear() {
+  ViewController::viewWillAppear();
   m_contentView.curveView()->setOkView(nullptr);
   /* We need to change the curve range to keep the same visual aspect of the
    * view. */
@@ -96,16 +58,19 @@ int ZoomParameterController::ContentView::numberOfSubviews() const {
 
 View * ZoomParameterController::ContentView::subviewAtIndex(int index) {
   assert(index >= 0 && index < 2);
+  /* The order of subviews matters here: redrawing curve view can be long and
+   * if it was redraw before the legend view, you could see noise when
+   * switching the device on and off. */
   if (index == 0) {
-    return m_curveView;
+    return &m_legendView;
   }
-  return &m_legendView;
+  return m_curveView;
 }
 
-void ZoomParameterController::ContentView::layoutSubviews() {
+void ZoomParameterController::ContentView::layoutSubviews(bool force) {
   assert(bounds().height() == ZoomParameterController::k_standardViewHeight);
-  m_curveView->setFrame(KDRect(0, 0, bounds().width(), bounds().height() - k_legendHeight));
-  m_legendView.setFrame(KDRect(0, bounds().height() - k_legendHeight, bounds().width(), k_legendHeight));
+  m_curveView->setFrame(KDRect(0, 0, bounds().width(), bounds().height() - k_legendHeight), force);
+  m_legendView.setFrame(KDRect(0, bounds().height() - k_legendHeight, bounds().width(), k_legendHeight), force);
 }
 
 CurveView * ZoomParameterController::ContentView::curveView() {
@@ -146,22 +111,22 @@ View * ZoomParameterController::ContentView::LegendView::subviewAtIndex(int inde
   return &m_legendPictograms[index-k_numberOfLegends];
 }
 
-void ZoomParameterController::ContentView::LegendView::layoutSubviews() {
+void ZoomParameterController::ContentView::LegendView::layoutSubviews(bool force) {
   KDCoordinate height = bounds().height();
   KDCoordinate xOrigin = 0;
   KDCoordinate legendWidth = m_legends[0].minimalSizeForOptimalDisplay().width();
-  m_legends[0].setFrame(KDRect(xOrigin, 0, legendWidth, height));
+  m_legends[0].setFrame(KDRect(xOrigin, 0, legendWidth, height), force);
   xOrigin += legendWidth;
   for (int i = 0; i < k_numberOfTokens - 2; i++) {
-    m_legendPictograms[i].setFrame(KDRect(xOrigin, 0, k_tokenWidth, height));
+    m_legendPictograms[i].setFrame(KDRect(xOrigin, 0, k_tokenWidth, height), force);
     xOrigin += k_tokenWidth;
   }
   xOrigin = bounds().width()/2;
   for (int i = 1; i < k_numberOfLegends; i++) {
     KDCoordinate legendWidth = m_legends[i].minimalSizeForOptimalDisplay().width();
-    m_legends[i].setFrame(KDRect(xOrigin, 0, legendWidth, height));
+    m_legends[i].setFrame(KDRect(xOrigin, 0, legendWidth, height), force);
     xOrigin += legendWidth;
-    m_legendPictograms[k_numberOfTokens - 3 + i].setFrame(KDRect(xOrigin, 0, k_tokenWidth, height));
+    m_legendPictograms[k_numberOfTokens - 3 + i].setFrame(KDRect(xOrigin, 0, k_tokenWidth, height), force);
     xOrigin += k_tokenWidth;
   }
 }

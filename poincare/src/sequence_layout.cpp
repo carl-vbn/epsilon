@@ -4,12 +4,13 @@
 #include <poincare/left_parenthesis_layout.h>
 #include <poincare/right_parenthesis_layout.h>
 #include <assert.h>
+#include <algorithm>
 
 namespace Poincare {
 
-static inline KDCoordinate maxCoordinate(KDCoordinate x, KDCoordinate y) { return x > y ? x : y; }
+constexpr KDCoordinate SequenceLayoutNode::k_symbolWidth;
 
-void SequenceLayoutNode::moveCursorLeft(LayoutCursor * cursor, bool * shouldRecomputeLayout) {
+void SequenceLayoutNode::moveCursorLeft(LayoutCursor * cursor, bool * shouldRecomputeLayout, bool forSelection) {
   if (cursor->layoutNode() == upperBoundLayout())
   {
     assert(cursor->position() == LayoutCursor::Position::Left);
@@ -55,7 +56,7 @@ void SequenceLayoutNode::moveCursorLeft(LayoutCursor * cursor, bool * shouldReco
   }
 }
 
-void SequenceLayoutNode::moveCursorRight(LayoutCursor * cursor, bool * shouldRecomputeLayout) {
+void SequenceLayoutNode::moveCursorRight(LayoutCursor * cursor, bool * shouldRecomputeLayout, bool forSelection) {
   if (cursor->layoutNode() == lowerBoundLayout()
         || cursor->layoutNode() == upperBoundLayout())
   {
@@ -94,7 +95,7 @@ void SequenceLayoutNode::moveCursorRight(LayoutCursor * cursor, bool * shouldRec
   }
 }
 
-void SequenceLayoutNode::moveCursorUp(LayoutCursor * cursor, bool * shouldRecomputeLayout, bool equivalentPositionVisited) {
+void SequenceLayoutNode::moveCursorUp(LayoutCursor * cursor, bool * shouldRecomputeLayout, bool equivalentPositionVisited, bool forSelection) {
   if (cursor->layoutNode()->hasAncestor(lowerBoundLayout(), true) || cursor->layoutNode()->hasAncestor(variableLayout(), true)) {
   // If the cursor is inside the lower bound or inside the variable name, move it to the upper bound
     upperBoundLayout()->moveCursorUpInDescendants(cursor, shouldRecomputeLayout);
@@ -114,7 +115,7 @@ void SequenceLayoutNode::moveCursorUp(LayoutCursor * cursor, bool * shouldRecomp
   LayoutNode::moveCursorUp(cursor, shouldRecomputeLayout, equivalentPositionVisited);
 }
 
-void SequenceLayoutNode::moveCursorDown(LayoutCursor * cursor, bool * shouldRecomputeLayout, bool equivalentPositionVisited) {
+void SequenceLayoutNode::moveCursorDown(LayoutCursor * cursor, bool * shouldRecomputeLayout, bool equivalentPositionVisited, bool forSelection) {
   if (cursor->layoutNode()->hasAncestor(upperBoundLayout(), true)) {
     // If the cursor is inside the upper bound, move it to the lower bound
     lowerBoundLayout()->moveCursorDownInDescendants(cursor, shouldRecomputeLayout);
@@ -160,7 +161,7 @@ KDSize SequenceLayoutNode::lowerBoundSizeWithVariableEquals() {
   KDSize equalSize = k_font->stringSize(k_equal);
   return KDSize(
       variableSize.width() + equalSize.width() + lowerBoundSize.width(),
-      subscriptBaseline() + maxCoordinate(maxCoordinate(variableSize.height() - variableLayout()->baseline(), lowerBoundSize.height() - lowerBoundLayout()->baseline()), equalSize.height()/2));
+      subscriptBaseline() + std::max(std::max(variableSize.height() - variableLayout()->baseline(), lowerBoundSize.height() - lowerBoundLayout()->baseline()), equalSize.height()/2));
 }
 
 KDSize SequenceLayoutNode::computeSize() {
@@ -171,13 +172,13 @@ KDSize SequenceLayoutNode::computeSize() {
     argumentSize.width() + 2*ParenthesisLayoutNode::ParenthesisWidth(),
     ParenthesisLayoutNode::HeightGivenChildHeight(argumentSize.height()));
   KDSize result = KDSize(
-    maxCoordinate(maxCoordinate(k_symbolWidth, totalLowerBoundSize.width()), upperBoundSize.width())+k_argumentWidthMargin+argumentSizeWithParentheses.width(),
-    baseline() + maxCoordinate(k_symbolHeight/2+k_boundHeightMargin+totalLowerBoundSize.height(), argumentSizeWithParentheses.height() - argumentLayout()->baseline()));
+    std::max(std::max(k_symbolWidth, totalLowerBoundSize.width()), upperBoundSize.width())+k_argumentWidthMargin+argumentSizeWithParentheses.width(),
+    baseline() + std::max(k_symbolHeight/2+k_boundHeightMargin+totalLowerBoundSize.height(), argumentSizeWithParentheses.height() - argumentLayout()->baseline()));
   return result;
 }
 
 KDCoordinate SequenceLayoutNode::computeBaseline() {
-  return maxCoordinate(upperBoundLayout()->layoutSize().height()+k_boundHeightMargin+(k_symbolHeight+1)/2, argumentLayout()->baseline());
+  return std::max<KDCoordinate>(upperBoundLayout()->layoutSize().height()+k_boundHeightMargin+(k_symbolHeight+1)/2, argumentLayout()->baseline());
 }
 
 KDPoint SequenceLayoutNode::positionOfChild(LayoutNode * l) {
@@ -193,10 +194,10 @@ KDPoint SequenceLayoutNode::positionOfChild(LayoutNode * l) {
     x = completeLowerBoundX() + equalSize.width() + variableSize.width();
     y = baseline() + k_symbolHeight/2 + k_boundHeightMargin + subscriptBaseline() - lowerBoundLayout()->baseline();
   } else if (l == upperBoundLayout()) {
-    x = maxCoordinate(maxCoordinate(0, (k_symbolWidth-upperBoundSize.width())/2), (lowerBoundSizeWithVariableEquals().width()-upperBoundSize.width())/2);
+    x = std::max(std::max(0, (k_symbolWidth-upperBoundSize.width())/2), (lowerBoundSizeWithVariableEquals().width()-upperBoundSize.width())/2);
     y = baseline() - (k_symbolHeight+1)/2- k_boundHeightMargin-upperBoundSize.height();
   } else if (l == argumentLayout()) {
-    x = maxCoordinate(maxCoordinate(k_symbolWidth, lowerBoundSizeWithVariableEquals().width()), upperBoundSize.width())+k_argumentWidthMargin+ParenthesisLayoutNode::ParenthesisWidth();
+    x = std::max(std::max(k_symbolWidth, lowerBoundSizeWithVariableEquals().width()), upperBoundSize.width())+k_argumentWidthMargin+ParenthesisLayoutNode::ParenthesisWidth();
     y = baseline() - argumentLayout()->baseline();
   } else {
     assert(false);
@@ -244,7 +245,7 @@ int SequenceLayoutNode::writeDerivedClassInBuffer(const char * operatorName, cha
   return numberOfChar;
 }
 
-void SequenceLayoutNode::render(KDContext * ctx, KDPoint p, KDColor expressionColor, KDColor backgroundColor) {
+void SequenceLayoutNode::render(KDContext * ctx, KDPoint p, KDColor expressionColor, KDColor backgroundColor, Layout * selectionStart, Layout * selectionEnd, KDColor selectionColor) {
   // Render the "="
   KDSize variableSize = variableLayout()->layoutSize();
   KDPoint equalPosition = positionOfChild(variableLayout()).translatedBy(KDPoint(variableSize.width(), variableLayout()->baseline()-k_font->stringSize(k_equal).height()/2));
@@ -267,12 +268,12 @@ void SequenceLayoutNode::render(KDContext * ctx, KDPoint p, KDColor expressionCo
 
 KDCoordinate SequenceLayoutNode::completeLowerBoundX() {
   KDSize upperBoundSize = upperBoundLayout()->layoutSize();
- return maxCoordinate(maxCoordinate(0, (k_symbolWidth-lowerBoundSizeWithVariableEquals().width())/2),
+ return std::max(std::max(0, (k_symbolWidth-lowerBoundSizeWithVariableEquals().width())/2),
           (upperBoundSize.width()-lowerBoundSizeWithVariableEquals().width())/2);
 }
 
 KDCoordinate SequenceLayoutNode::subscriptBaseline() {
-  return maxCoordinate(maxCoordinate(variableLayout()->baseline(), lowerBoundLayout()->baseline()), k_font->stringSize(k_equal).height()/2);
+  return std::max<KDCoordinate>(std::max(variableLayout()->baseline(), lowerBoundLayout()->baseline()), k_font->stringSize(k_equal).height()/2);
 }
 
 }

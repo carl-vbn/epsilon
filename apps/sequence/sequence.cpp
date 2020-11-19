@@ -28,7 +28,6 @@ void Sequence::tidy() {
   m_firstInitialCondition.tidyName();
   m_secondInitialCondition.tidy();
   m_secondInitialCondition.tidyName();
-  m_nameLayout = Layout();
 }
 
 Sequence::Type Sequence::type() const {
@@ -51,13 +50,13 @@ void Sequence::setType(Type t) {
   /* Reset all contents */
   switch (t) {
     case Type::Explicit:
-      setContent("");
+      setContent("", nullptr); // No context needed here
       break;
     case Type::SingleRecurrence:
     {
       char ex[5] = "u(n)";
       ex[0] = fullName()[0];
-      setContent(ex);
+      setContent(ex, nullptr); // No context needed here
       break;
     }
     case Type::DoubleRecurrence:
@@ -66,12 +65,12 @@ void Sequence::setType(Type t) {
       char name = fullName()[0];
       ex[0] = name;
       ex[7] = name;
-      setContent(ex);
+      setContent(ex, nullptr); // No context needed here
       break;
     }
   }
-  setFirstInitialConditionContent("");
-  setSecondInitialConditionContent("");
+  setFirstInitialConditionContent("", nullptr); // No context needed here
+  setSecondInitialConditionContent("", nullptr); // No context needed here
 }
 
 void Sequence::setInitialRank(int rank) {
@@ -81,13 +80,10 @@ void Sequence::setInitialRank(int rank) {
 }
 
 Poincare::Layout Sequence::nameLayout() {
-  if (m_nameLayout.isUninitialized()) {
-    m_nameLayout = HorizontalLayout::Builder(
-        CodePointLayout::Builder(fullName()[0], KDFont::SmallFont),
-        VerticalOffsetLayout::Builder(CodePointLayout::Builder(symbol(), KDFont::SmallFont), VerticalOffsetLayoutNode::Position::Subscript)
-      );
-  }
-  return m_nameLayout;
+  return HorizontalLayout::Builder(
+      CodePointLayout::Builder(fullName()[0], KDFont::SmallFont),
+      VerticalOffsetLayout::Builder(CodePointLayout::Builder(symbol(), KDFont::SmallFont), VerticalOffsetLayoutNode::Position::Subscript)
+    );
 }
 
 bool Sequence::isDefined() {
@@ -129,7 +125,7 @@ T Sequence::approximateToNextRank(int n, SequenceContext * sqctx) const {
 
   constexpr int bufferSize = CodePoint::MaxCodePointCharLength + 1;
   char unknownN[bufferSize];
-  Poincare::SerializationHelper::CodePoint(unknownN, bufferSize, UCodePointUnknownX);
+  Poincare::SerializationHelper::CodePoint(unknownN, bufferSize, UCodePointUnknown);
 
   CacheContext<T> ctx = CacheContext<T>(sqctx);
   // Hold values u(n), u(n-1), u(n-2), v(n), v(n-1), v(n-2)...

@@ -5,27 +5,26 @@
 #include <float.h>
 #include <cmath>
 #include <string.h>
+#include <algorithm>
 
 using namespace Shared;
 
 namespace Regression {
 
-static inline float maxFloat(float x, float y) { return x > y ? x : y; }
-static inline float minFloat(float x, float y) { return x < y ? x : y; }
-
-static_assert(Model::k_numberOfModels == 9, "Number of models changed, Regression::Store() needs to adapt");
+static_assert(Model::k_numberOfModels == 10, "Number of models changed, Regression::Store() needs to adapt");
 static_assert(Store::k_numberOfSeries == 3, "Number of series changed, Regression::Store() needs to adapt (m_seriesChecksum)");
 
 Store::Store() :
   InteractiveCurveViewRange(),
   DoublePairStore(),
-  m_seriesChecksum{0, 0, 0},
   m_angleUnit(Poincare::Preferences::AngleUnit::Degree)
 {
-  for (int i = 0; i < k_numberOfSeries; i++) {
-    m_regressionTypes[i] = Model::Type::Linear;
-    m_regressionChanged[i] = false;
-  }
+  resetMemoization();
+}
+
+void Store::reset() {
+  deleteAllPairs();
+  resetMemoization();
 }
 
 void Store::tidy() {
@@ -145,8 +144,8 @@ void Store::setDefault() {
   float maxX = -FLT_MAX;
   for (int series = 0; series < k_numberOfSeries; series++) {
     if (!seriesIsEmpty(series)) {
-      minX = minFloat(minX, minValueOfColumn(series, 0));
-      maxX = maxFloat(maxX, maxValueOfColumn(series, 0));
+      minX = std::min(minX, minValueOfColumn(series, 0));
+      maxX = std::max(maxX, maxValueOfColumn(series, 0));
     }
   }
   float range = maxX - minX;
@@ -188,10 +187,17 @@ double Store::doubleCastedNumberOfPairsOfSeries(int series) const {
   return DoublePairStore::numberOfPairsOfSeries(series);
 }
 
+void Store::resetMemoization() {
+  assert(((int)Model::Type::Linear) == 0);
+  memset(m_seriesChecksum, 0, sizeof(m_seriesChecksum));
+  memset(m_regressionTypes, 0, sizeof(m_regressionTypes));
+  memset(m_regressionChanged, 0, sizeof(m_regressionChanged));
+}
+
 float Store::maxValueOfColumn(int series, int i) const {
   float maxColumn = -FLT_MAX;
   for (int k = 0; k < numberOfPairsOfSeries(series); k++) {
-    maxColumn = maxFloat(maxColumn, m_data[series][i][k]);
+    maxColumn = std::max<float>(maxColumn, m_data[series][i][k]);
   }
   return maxColumn;
 }
@@ -199,50 +205,58 @@ float Store::maxValueOfColumn(int series, int i) const {
 float Store::minValueOfColumn(int series, int i) const {
   float minColumn = FLT_MAX;
   for (int k = 0; k < numberOfPairsOfSeries(series); k++) {
-    minColumn = minFloat(minColumn, m_data[series][i][k]);
+    minColumn = std::min<float>(minColumn, m_data[series][i][k]);
   }
   return minColumn;
 }
 
-double Store::squaredValueSumOfColumn(int series, int i) const {
+double Store::squaredValueSumOfColumn(int series, int i, bool lnOfSeries) const {
   double result = 0;
   for (int k = 0; k < numberOfPairsOfSeries(series); k++) {
-    result += m_data[series][i][k]*m_data[series][i][k];
+    if (lnOfSeries) {
+      result += log(m_data[series][i][k]) * log(m_data[series][i][k]);
+    } else {
+      result += m_data[series][i][k]*m_data[series][i][k];
+    }
   }
   return result;
 }
 
-double Store::columnProductSum(int series) const {
+double Store::columnProductSum(int series, bool lnOfSeries) const {
   double result = 0;
   for (int k = 0; k < numberOfPairsOfSeries(series); k++) {
-    result += m_data[series][0][k]*m_data[series][1][k];
+    if (lnOfSeries) {
+      result += log(m_data[series][0][k]) * log(m_data[series][1][k]);
+    } else {
+      result += m_data[series][0][k] * m_data[series][1][k];
+    }
   }
   return result;
 }
 
-double Store::meanOfColumn(int series, int i) const {
-  return numberOfPairsOfSeries(series) == 0 ? 0 : sumOfColumn(series, i)/numberOfPairsOfSeries(series);
+double Store::meanOfColumn(int series, int i, bool lnOfSeries) const {
+  return numberOfPairsOfSeries(series) == 0 ? 0 : sumOfColumn(series, i, lnOfSeries)/numberOfPairsOfSeries(series);
 }
 
-double Store::varianceOfColumn(int series, int i) const {
-  double mean = meanOfColumn(series, i);
-  return squaredValueSumOfColumn(series, i)/numberOfPairsOfSeries(series) - mean*mean;
+double Store::varianceOfColumn(int series, int i, bool lnOfSeries) const {
+  double mean = meanOfColumn(series, i, lnOfSeries);
+  return squaredValueSumOfColumn(series, i, lnOfSeries)/numberOfPairsOfSeries(series) - mean*mean;
 }
 
-double Store::standardDeviationOfColumn(int series, int i) const {
-  return std::sqrt(varianceOfColumn(series, i));
+double Store::standardDeviationOfColumn(int series, int i, bool lnOfSeries) const {
+  return std::sqrt(varianceOfColumn(series, i, lnOfSeries));
 }
 
-double Store::covariance(int series) const {
-  return columnProductSum(series)/numberOfPairsOfSeries(series) - meanOfColumn(series, 0)*meanOfColumn(series, 1);
+double Store::covariance(int series, bool lnOfSeries) const {
+  return columnProductSum(series, lnOfSeries)/numberOfPairsOfSeries(series) - meanOfColumn(series, 0, lnOfSeries)*meanOfColumn(series, 1, lnOfSeries);
 }
 
-double Store::slope(int series) const {
-  return LinearModelHelper::Slope(covariance(series), varianceOfColumn(series, 0));
+double Store::slope(int series, bool lnOfSeries) const {
+  return LinearModelHelper::Slope(covariance(series, lnOfSeries), varianceOfColumn(series, 0, lnOfSeries));
 }
 
-double Store::yIntercept(int series) const {
-  return LinearModelHelper::YIntercept(meanOfColumn(series, 1), meanOfColumn(series, 0), slope(series));
+double Store::yIntercept(int series, bool lnOfSeries) const {
+  return LinearModelHelper::YIntercept(meanOfColumn(series, 1, lnOfSeries), meanOfColumn(series, 0, lnOfSeries), slope(series, lnOfSeries));
 }
 
 double Store::yValueForXValue(int series, double x, Poincare::Context * globalContext) {
@@ -271,7 +285,7 @@ double Store::squaredCorrelationCoefficient(int series) const {
 }
 
 Model * Store::regressionModel(int index) {
-  Model * models[Model::k_numberOfModels] = {&m_linearModel, &m_quadraticModel, &m_cubicModel, &m_quarticModel, &m_logarithmicModel, &m_exponentialModel, &m_powerModel, &m_trigonometricModel, &m_logisticModel};
+  Model * models[Model::k_numberOfModels] = {&m_linearModel, &m_proportionalModel, &m_quadraticModel, &m_cubicModel, &m_quarticModel, &m_logarithmicModel, &m_exponentialModel, &m_powerModel, &m_trigonometricModel, &m_logisticModel};
   return models[index];
 }
 

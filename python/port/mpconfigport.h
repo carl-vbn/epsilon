@@ -5,6 +5,19 @@
 /* MicroPython configuration options
  * We're not listing the default options as defined in mpconfig.h */
 
+#if __EMSCRIPTEN__
+// Enable a PyStack where most objects are allocated instead of always using the heap
+/* This enables to allocate and free memory in a scope (thus, Python can call
+ * Python) but also has the collateral effect of removing bugs regarding
+ * garbage collection on the web simulator. Indeed, fewer objetcts are
+ * allocated on the heap and the garbage collection is less frequently called.
+ * We suspect that garbage collection failed in javascript because when
+ * collecting roots the transpiled C code is denied access to Javascript
+ * variables that can store pointers to the Python heap. The pointed objects
+ * are therefore erased prematurely. */
+#define MICROPY_ENABLE_PYSTACK (1)
+#endif
+
 // Maximum length of a path in the filesystem
 #define MICROPY_ALLOC_PATH_MAX (32)
 
@@ -106,8 +119,6 @@ typedef uintptr_t mp_uint_t; // must be pointer size
 
 typedef long mp_off_t;
 
-#define SEEK_CUR 1
-
 // extra built in names to add to the global namespace
 #define MICROPY_PORT_BUILTINS \
     { MP_OBJ_NEW_QSTR(MP_QSTR_open), (mp_obj_t)&mp_builtin_open_obj }, \
@@ -117,12 +128,16 @@ typedef long mp_off_t;
 
 extern const struct _mp_obj_module_t modion_module;
 extern const struct _mp_obj_module_t modkandinsky_module;
+extern const struct _mp_obj_module_t modmatplotlib_module;
+extern const struct _mp_obj_module_t modpyplot_module;
 extern const struct _mp_obj_module_t modtime_module;
 extern const struct _mp_obj_module_t modturtle_module;
 
 #define MICROPY_PORT_BUILTIN_MODULES \
     { MP_ROM_QSTR(MP_QSTR_ion), MP_ROM_PTR(&modion_module) }, \
     { MP_ROM_QSTR(MP_QSTR_kandinsky), MP_ROM_PTR(&modkandinsky_module) }, \
+    { MP_ROM_QSTR(MP_QSTR_matplotlib), MP_ROM_PTR(&modmatplotlib_module) }, \
+    { MP_ROM_QSTR(MP_QSTR_matplotlib_dot_pyplot), MP_ROM_PTR(&modpyplot_module) }, \
     { MP_ROM_QSTR(MP_QSTR_time), MP_ROM_PTR(&modtime_module) }, \
     { MP_ROM_QSTR(MP_QSTR_turtle), MP_ROM_PTR(&modturtle_module) }, \
 

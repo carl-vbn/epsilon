@@ -23,7 +23,7 @@ public:
   };
 
   constexpr static int k_maxPacketSize = 64;
-  constexpr static int MaxTransferSize = 2048;
+  constexpr static uint16_t MaxTransferSize = 2048;
 
   constexpr Endpoint0(RequestRecipient * device, RequestRecipient * interface) :
     m_forceNAK(false),
@@ -57,7 +57,7 @@ public:
   void clearForOutTransactions(uint16_t wLength);
 
 private:
-  uint16_t receiveSomeData();
+  int receiveSomeData();
   uint16_t readPacket(void * buffer, uint16_t length);
   uint16_t writePacket(const void * buffer, uint16_t length);
 

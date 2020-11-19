@@ -66,7 +66,7 @@ public:
         0,      // bInterfaceNumber
         k_dfuInterfaceAlternateSetting,      // bAlternateSetting
         0,      // bNumEndpoints: Other than endpoint 0
-        0xFE,   // bInterfaceClass: DFU (http://www.usb.org/developers/defined_class)
+        0xFE,   // bInterfaceClass: DFU (https://www.usb.org/defined-class-codes)
         1,      // bInterfaceSubClass: DFU
         2,      // bInterfaceProtocol: DFU Mode (not DFU Runtime, which would be 1)
         4,      // iInterface: Index of the Interface string, see m_descriptor
@@ -115,12 +115,13 @@ public:
   {
   }
   uint32_t addressPointer() const { return m_dfuInterface.addressPointer(); }
+  bool isErasingAndWriting() const { return m_dfuInterface.isErasingAndWriting(); }
 protected:
-  virtual Descriptor * descriptor(uint8_t type, uint8_t index) override;
-  virtual void setActiveConfiguration(uint8_t configurationIndex) override {
+  Descriptor * descriptor(uint8_t type, uint8_t index) override;
+  void setActiveConfiguration(uint8_t configurationIndex) override {
     assert(configurationIndex == k_bConfigurationValue);
   }
-  virtual uint8_t getActiveConfiguration() override {
+  uint8_t getActiveConfiguration() override {
     return k_bConfigurationValue;
   }
   bool processSetupInRequest(SetupPacket * request, uint8_t * transferBuffer, uint16_t * transferBufferLength, uint16_t transferBufferMaxLength) override;

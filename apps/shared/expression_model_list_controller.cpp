@@ -1,10 +1,9 @@
 #include "expression_model_list_controller.h"
 #include <apps/constant.h>
 #include <poincare/symbol.h>
+#include <algorithm>
 
 namespace Shared {
-
-static inline int minInt(int x, int y) { return x < y ? x : y; }
 
 /* Table Data Source */
 
@@ -121,7 +120,7 @@ int ExpressionModelListController::memoizedIndexFromCumulatedHeight(KDCoordinate
 
   KDCoordinate currentCumulatedHeight = memoizedCumulatedHeightFromIndex(currentSelectedRow);
   if (offsetY > currentCumulatedHeight) {
-    int iMax = minInt(k_memoizedCellsCount/2 + 1, rowsCount - currentSelectedRow);
+    int iMax = std::min(k_memoizedCellsCount/2 + 1, rowsCount - currentSelectedRow);
     for (int i = 0; i < iMax; i++) {
       currentCumulatedHeight+= memoizedRowHeight(currentSelectedRow + i);
       if (offsetY <= currentCumulatedHeight) {
@@ -129,7 +128,7 @@ int ExpressionModelListController::memoizedIndexFromCumulatedHeight(KDCoordinate
       }
     }
   } else {
-    int iMax = minInt(k_memoizedCellsCount/2, currentSelectedRow);
+    int iMax = std::min(k_memoizedCellsCount/2, currentSelectedRow);
     for (int i = 1; i <= iMax; i++) {
       currentCumulatedHeight-= memoizedRowHeight(currentSelectedRow-i);
       if (offsetY > currentCumulatedHeight) {
@@ -216,7 +215,7 @@ void ExpressionModelListController::addEmptyModel() {
 }
 
 void ExpressionModelListController::reinitSelectedExpression(ExpiringPointer<ExpressionModelHandle> model) {
-  model->setContent("");
+  model->setContent("", Container::activeApp()->localContext());
   // Reset memoization of the selected cell which always corresponds to the k_memoizedCellsCount/2 memoized cell
   resetMemoizationForIndex(k_memoizedCellsCount/2);
   selectableTableView()->reloadData();
@@ -244,11 +243,12 @@ void ExpressionModelListController::editExpression(Ion::Events::Event event) {
 }
 
 bool ExpressionModelListController::editSelectedRecordWithText(const char * text) {
+  telemetryReportEvent("Edit", text);
   // Reset memoization of the selected cell which always corresponds to the k_memoizedCellsCount/2 memoized cell
   resetMemoizationForIndex(k_memoizedCellsCount/2);
   Ion::Storage::Record record = modelStore()->recordAtIndex(modelIndexForRow(selectedRow()));
   ExpiringPointer<ExpressionModelHandle> model = modelStore()->modelForRecord(record);
-  return (model->setContent(text) == Ion::Storage::Record::ErrorStatus::None);
+  return (model->setContent(text, Container::activeApp()->localContext()) == Ion::Storage::Record::ErrorStatus::None);
 }
 
 bool ExpressionModelListController::removeModelRow(Ion::Storage::Record record) {

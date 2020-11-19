@@ -22,17 +22,21 @@ const char * GenericSubController::title() {
   return "";
 }
 
-View * GenericSubController::view() {
-  return &m_selectableTableView;
-}
-
-void GenericSubController::didEnterResponderChain(Responder * previousFirstResponder) {
-  selectCellAtLocation(0, initialSelectedRow());
-  m_selectableTableView.reloadData();
-}
-
 void GenericSubController::didBecomeFirstResponder() {
   Container::activeApp()->setFirstResponder(&m_selectableTableView);
+}
+
+void GenericSubController::viewWillAppear() {
+  ViewController::viewWillAppear();
+  /* This can't be done in didEnterResponderChain because we don't want it to
+   * be done everytime the pop-up disappears. For example, if we are editing a
+   * field and a pop-up shows up with a warning, we don't want to reload the
+   * entire table when dismissing the pop-up (that would erase the edition). */
+  selectCellAtLocation(0, initialSelectedRow());
+  /* A unique SubController is used for all sub pages of settings. We have to
+   * reload its data when it is displayed as it could switch from displaying
+   * "Angle unit" data to "Complex format" data for instance. */
+  m_selectableTableView.reloadData();
 }
 
 bool GenericSubController::handleEvent(Ion::Events::Event event) {
@@ -72,7 +76,7 @@ int GenericSubController::typeAtLocation(int i, int j) {
 
 void GenericSubController::willDisplayCellForIndex(HighlightCell * cell, int index) {
   MessageTableCell * myCell = (MessageTableCell *)cell;
-  myCell->setMessage(m_messageTreeModel->children(index)->label());
+  myCell->setMessage(m_messageTreeModel->childAtIndex(index)->label());
 }
 
 void GenericSubController::setMessageTreeModel(const MessageTree * messageTreeModel) {

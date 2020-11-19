@@ -8,13 +8,11 @@ namespace Shared {
 
 FunctionGraphView::FunctionGraphView(InteractiveCurveViewRange * graphRange,
   CurveViewCursor * cursor, BannerView * bannerView, CursorView * cursorView) :
-  CurveView(graphRange, cursor, bannerView, cursorView),
+  LabeledCurveView(graphRange, cursor, bannerView, cursorView),
   m_selectedRecord(),
   m_highlightedStart(NAN),
   m_highlightedEnd(NAN),
   m_shouldColorHighlighted(false),
-  m_xLabels{},
-  m_yLabels{},
   m_context(nullptr)
 {
 }
@@ -67,16 +65,12 @@ void FunctionGraphView::setAreaHighlightColor(bool highlightColor) {
   }
 }
 
-char * FunctionGraphView::label(Axis axis, int index) const {
-  return (axis == Axis::Horizontal ? (char *)m_xLabels[index] : (char *)m_yLabels[index]);
-}
-
 void FunctionGraphView::reloadBetweenBounds(float start, float end) {
   if (start == end) {
     return;
   }
-  float pixelLowerBound = floatToPixel(Axis::Horizontal, start)-2.0;
-  float pixelUpperBound = floatToPixel(Axis::Horizontal, end)+4.0;
+  float pixelLowerBound = floatToPixel(Axis::Horizontal, start) - 2.0f;
+  float pixelUpperBound = floatToPixel(Axis::Horizontal, end) + 4.0f;
   /* We exclude the banner frame from the dirty zone to avoid unnecessary
    * redrawing */
   KDRect dirtyZone(KDRect(pixelLowerBound, 0, pixelUpperBound-pixelLowerBound,

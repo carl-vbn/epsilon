@@ -4,12 +4,11 @@
 #include <poincare/right_parenthesis_layout.h>
 #include <poincare/layout_helper.h>
 #include <assert.h>
+#include <algorithm>
 
 namespace Poincare {
 
-static inline KDCoordinate maxCoordinate(KDCoordinate x, KDCoordinate y) { return x > y ? x : y; }
-
-void BinomialCoefficientLayoutNode::moveCursorLeft(LayoutCursor * cursor, bool * shouldRecomputeLayout) {
+void BinomialCoefficientLayoutNode::moveCursorLeft(LayoutCursor * cursor, bool * shouldRecomputeLayout, bool forSelection) {
   if (cursor->position() == LayoutCursor::Position::Left
       && (cursor->layoutNode() == nLayout()
         || cursor->layoutNode() == kLayout()))
@@ -33,7 +32,7 @@ void BinomialCoefficientLayoutNode::moveCursorLeft(LayoutCursor * cursor, bool *
   }
 }
 
-void BinomialCoefficientLayoutNode::moveCursorRight(LayoutCursor * cursor, bool * shouldRecomputeLayout) {
+void BinomialCoefficientLayoutNode::moveCursorRight(LayoutCursor * cursor, bool * shouldRecomputeLayout, bool forSelection) {
   if (cursor->position() == LayoutCursor::Position::Right
       && (cursor->layoutNode() == nLayout()
         || cursor->layoutNode() == kLayout()))
@@ -57,7 +56,7 @@ void BinomialCoefficientLayoutNode::moveCursorRight(LayoutCursor * cursor, bool 
   }
 }
 
-void BinomialCoefficientLayoutNode::moveCursorUp(LayoutCursor * cursor, bool * shouldRecomputeLayout, bool equivalentPositionVisited) {
+void BinomialCoefficientLayoutNode::moveCursorUp(LayoutCursor * cursor, bool * shouldRecomputeLayout, bool equivalentPositionVisited, bool forSelection) {
   if (cursor->layoutNode()->hasAncestor(kLayout(), true)) {
     // Case: kLayout. Move to nLayout.
     return nLayout()->moveCursorUpInDescendants(cursor, shouldRecomputeLayout);
@@ -65,7 +64,7 @@ void BinomialCoefficientLayoutNode::moveCursorUp(LayoutCursor * cursor, bool * s
   LayoutNode::moveCursorUp(cursor, shouldRecomputeLayout, equivalentPositionVisited);
 }
 
-void BinomialCoefficientLayoutNode::moveCursorDown(LayoutCursor * cursor, bool * shouldRecomputeLayout, bool equivalentPositionVisited) {
+void BinomialCoefficientLayoutNode::moveCursorDown(LayoutCursor * cursor, bool * shouldRecomputeLayout, bool equivalentPositionVisited, bool forSelection) {
   if (cursor->layoutNode()->hasAncestor(nLayout(), true)) {
     // Case: nLayout. Move to kLayout.
     return kLayout()->moveCursorDownInDescendants(cursor, shouldRecomputeLayout);
@@ -79,7 +78,7 @@ int BinomialCoefficientLayoutNode::serialize(char * buffer, int bufferSize, Pref
 
 KDSize BinomialCoefficientLayoutNode::computeSize() {
   KDSize coefficientsSize = KDSize(
-      maxCoordinate(nLayout()->layoutSize().width(), kLayout()->layoutSize().width()),
+      std::max(nLayout()->layoutSize().width(), kLayout()->layoutSize().width()),
       knHeight());
   KDCoordinate width = coefficientsSize.width() + 2*ParenthesisLayoutNode::ParenthesisWidth();
   return KDSize(width, coefficientsSize.height());
@@ -90,7 +89,7 @@ KDCoordinate BinomialCoefficientLayoutNode::computeBaseline() {
 }
 
 KDPoint BinomialCoefficientLayoutNode::positionOfChild(LayoutNode * child) {
-  KDCoordinate horizontalCenter = ParenthesisLayoutNode::ParenthesisWidth() + maxCoordinate(nLayout()->layoutSize().width(), kLayout()->layoutSize().width())/2;
+  KDCoordinate horizontalCenter = ParenthesisLayoutNode::ParenthesisWidth() + std::max(nLayout()->layoutSize().width(), kLayout()->layoutSize().width())/2;
   if (child == nLayout()) {
     return KDPoint(horizontalCenter - nLayout()->layoutSize().width()/2, 0);
   }
@@ -98,10 +97,10 @@ KDPoint BinomialCoefficientLayoutNode::positionOfChild(LayoutNode * child) {
   return KDPoint(horizontalCenter - kLayout()->layoutSize().width()/2, knHeight() - kLayout()->layoutSize().height());
 }
 
-void BinomialCoefficientLayoutNode::render(KDContext * ctx, KDPoint p, KDColor expressionColor, KDColor backgroundColor) {
+void BinomialCoefficientLayoutNode::render(KDContext * ctx, KDPoint p, KDColor expressionColor, KDColor backgroundColor, Layout * selectionStart, Layout * selectionEnd, KDColor selectionColor) {
   // Render the parentheses.
   KDCoordinate childHeight = knHeight();
-  KDCoordinate rightParenthesisPointX = maxCoordinate(nLayout()->layoutSize().width(), kLayout()->layoutSize().width()) + LeftParenthesisLayoutNode::ParenthesisWidth();
+  KDCoordinate rightParenthesisPointX = std::max(nLayout()->layoutSize().width(), kLayout()->layoutSize().width()) + LeftParenthesisLayoutNode::ParenthesisWidth();
   LeftParenthesisLayoutNode::RenderWithChildHeight(childHeight, ctx, p, expressionColor, backgroundColor);
   RightParenthesisLayoutNode::RenderWithChildHeight(childHeight, ctx, p.translatedBy(KDPoint(rightParenthesisPointX, 0)), expressionColor, backgroundColor);
 }

@@ -25,7 +25,7 @@ protected:
   const char * className() const override;
 #endif
   TableViewDataSource * dataSource();
-  void layoutSubviews() override;
+  void layoutSubviews(bool force = false) override;
   class ContentView : public View {
   public:
     ContentView(TableView * tableView, TableViewDataSource * dataSource, KDCoordinate horizontalCellOverlap, KDCoordinate verticalCellOverlap);
@@ -42,7 +42,7 @@ protected:
     int numberOfDisplayableRows() const;
     int numberOfDisplayableColumns() const;
     KDRect cellFrame(int i, int j) const;
-    void layoutSubviews() override;
+    void layoutSubviews(bool force = false) override;
   protected:
 #if ESCHER_VIEW_LOGGING
     const char * className() const override;
@@ -58,8 +58,6 @@ protected:
      * coordinates that refer to the data source entire table */
     int absoluteColumnNumberFromSubviewIndex(int index) const;
     int absoluteRowNumberFromSubviewIndex(int index) const;
-    int numberOfFullyDisplayableRows() const;
-    int numberOfFullyDisplayableColumns() const;
     int typeOfSubviewAtIndex(int index) const;
     /* This method transform a index (of subview for instance) into an index
      * refering to the set of cells of type "type". */

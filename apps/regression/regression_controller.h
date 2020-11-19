@@ -15,6 +15,7 @@ public:
   // ViewController
   const char * title() override;
   View * view() override { return &m_selectableTableView; }
+  TELEMETRY_ID("Regression");
 
   // Responder
   bool handleEvent(Ion::Events::Event event) override;
@@ -30,7 +31,7 @@ public:
   int numberOfRows() const override { return k_numberOfRows; }
   void willDisplayCellAtLocation(HighlightCell * cell, int i, int j) override;
 private:
-  constexpr static int k_numberOfRows = 9;
+  constexpr static int k_numberOfRows = 10;
   constexpr static int k_numberOfCells = 6; // (240 - 70) / 35
   MessageTableCellWithExpression m_regressionCells[k_numberOfCells];
   SelectableTableView m_selectableTableView;

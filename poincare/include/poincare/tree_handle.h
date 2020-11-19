@@ -2,7 +2,7 @@
 #define POINCARE_TREE_BY_REFERENCE_H
 
 #include <poincare/tree_pool.h>
-#include <stdio.h>
+#include <initializer_list>
 
 namespace Shared {
   class ContinuousFunction;
@@ -23,8 +23,6 @@ namespace Poincare {
  * equivalent to Logarithm l = Logarithm(clone())). */
 
 class TreeHandle {
-  template<class T>
-  friend class ArrayBuilder;
   friend class ::Shared::ContinuousFunction;
   friend class TreeNode;
   friend class TreePool;
@@ -56,14 +54,17 @@ public:
   }
 
   /* Comparison */
-  inline bool operator==(const TreeHandle& t) { return m_identifier == t.identifier(); }
-  inline bool operator!=(const TreeHandle& t) { return m_identifier != t.identifier(); }
+  inline bool operator==(const TreeHandle& t) const { return m_identifier == t.identifier(); }
+  inline bool operator!=(const TreeHandle& t) const { return m_identifier != t.identifier(); }
 
   /* Clone */
   TreeHandle clone() const;
 
-  int identifier() const { return m_identifier; }
+  uint16_t identifier() const { return m_identifier; }
   TreeNode * node() const;
+  bool wasErasedByException() const {
+    return hasNode(m_identifier) && node() == nullptr;
+  }
   int nodeRetainCount() const { return node()->retainCount(); }
   size_t size() const;
   void * addressInPool() const { return reinterpret_cast<void *>(node()); }
@@ -75,11 +76,12 @@ public:
   bool hasChild(TreeHandle t) const;
   bool hasSibling(TreeHandle t) const { return node()->hasSibling(t.node()); }
   bool hasAncestor(TreeHandle t, bool includeSelf) const { return node()->hasAncestor(t.node(), includeSelf); }
+  TreeHandle commonAncestorWith(TreeHandle t) const;
   int numberOfChildren() const { return node()->numberOfChildren(); }
   int indexOfChild(TreeHandle t) const;
   TreeHandle parent() const;
   TreeHandle childAtIndex(int i) const;
-  void setParentIdentifier(int id) { node()->setParentIdentifier(id); }
+  void setParentIdentifier(uint16_t id) { node()->setParentIdentifier(id); }
   void deleteParentIdentifier() { node()->deleteParentIdentifier(); }
   void deleteParentIdentifierInChildren() { node()->deleteParentIdentifierInChildren(); }
   void incrementNumberOfChildren(int increment = 1) { node()->incrementNumberOfChildren(increment); }
@@ -106,11 +108,13 @@ public:
   void log() const;
 #endif
 
+  typedef std::initializer_list<TreeHandle> Tuple;
+
 protected:
   /* Constructor */
   TreeHandle(const TreeNode * node);
   // Un-inlining this constructor actually inscreases the firmware size
-  TreeHandle(int nodeIndentifier = TreeNode::NoNodeIdentifier) : m_identifier(nodeIndentifier) {
+  TreeHandle(uint16_t nodeIndentifier = TreeNode::NoNodeIdentifier) : m_identifier(nodeIndentifier) {
     if (hasNode(nodeIndentifier)) {
       node()->retain();
     }
@@ -118,16 +122,16 @@ protected:
 
   // WARNING: if the children table is the result of a cast, the object downcasted has to be the same size as a TreeHandle.
   template <class T, class U>
-  static T NAryBuilder(TreeHandle * children = nullptr, size_t numberOfChildren = 0);
+  static T NAryBuilder(const Tuple & children = {});
   template <class T, class U>
-  static T FixedArityBuilder(TreeHandle * children = nullptr, size_t numberOfChildren = 0);
+  static T FixedArityBuilder(const Tuple & children = {});
 
   static TreeHandle BuildWithGhostChildren(TreeNode * node);
 
-  void setIdentifierAndRetain(int newId);
+  void setIdentifierAndRetain(uint16_t newId);
   void setTo(const TreeHandle & tr);
 
-  static bool hasNode(int identifier) { return identifier > TreeNode::NoNodeIdentifier; }
+  static bool hasNode(uint16_t identifier) { return TreeNode::IsValidIdentifier(identifier); }
 
   /* Hierarchy operations */
   // Add
@@ -137,7 +141,7 @@ protected:
   void removeChildInPlace(TreeHandle t, int childNumberOfChildren);
   void removeChildrenInPlace(int currentNumberOfChildren);
 
-  int m_identifier;
+  uint16_t m_identifier;
 
 private:
   template <class U>
@@ -146,7 +150,7 @@ private:
   void detachFromParent();
   // Add ghost children on layout construction
   void buildGhostChildren();
-  void release(int identifier);
+  void release(uint16_t identifier);
 };
 
 }

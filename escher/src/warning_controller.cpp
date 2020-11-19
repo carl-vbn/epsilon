@@ -1,7 +1,6 @@
 #include <escher/warning_controller.h>
 #include <escher/container.h>
-
-static inline KDCoordinate maxCoordinate(KDCoordinate x, KDCoordinate y) { return x > y ? x : y; }
+#include <algorithm>
 
 WarningController::ContentView::ContentView() :
   SolidColorView(KDColorBlack),
@@ -25,18 +24,18 @@ View * WarningController::ContentView::subviewAtIndex(int index) {
   return views[index];
 }
 
-void WarningController::ContentView::layoutSubviews() {
+void WarningController::ContentView::layoutSubviews(bool force) {
   if (numberOfSubviews() == 1) {
-    m_textView1.setFrame(bounds());
+    m_textView1.setFrame(bounds(), force);
     m_textView1.setAlignment(k_middleAlignment, k_middleAlignment);
     return;
   }
   assert(numberOfSubviews() == 2);
   KDRect fullBounds = bounds();
   KDCoordinate halfHeight = fullBounds.height()/2;
-  m_textView1.setFrame(KDRect(fullBounds.topLeft(), fullBounds.width(), halfHeight));
+  m_textView1.setFrame(KDRect(fullBounds.topLeft(), fullBounds.width(), halfHeight), force);
   m_textView1.setAlignment(k_middleAlignment, k_shiftedAlignment);
-  m_textView2.setFrame(KDRect(fullBounds.left(), fullBounds.top()+halfHeight, fullBounds.width(), halfHeight));
+  m_textView2.setFrame(KDRect(fullBounds.left(), fullBounds.top()+halfHeight, fullBounds.width(), halfHeight), force);
 }
 
 KDSize WarningController::ContentView::minimalSizeForOptimalDisplay() const  {
@@ -46,7 +45,7 @@ KDSize WarningController::ContentView::minimalSizeForOptimalDisplay() const  {
   }
   assert(numberOfSubviews() == 2);
   KDSize textSize2 = m_textView2.minimalSizeForOptimalDisplay();
-  return KDSize(maxCoordinate(textSize1.width(), textSize2.width()) + k_horizontalMargin,
+  return KDSize(std::max(textSize1.width(), textSize2.width()) + k_horizontalMargin,
       textSize1.height() + textSize2.height() + 2*k_topAndBottomMargin + k_middleMargin);
 }
 

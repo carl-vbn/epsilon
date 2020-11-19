@@ -1,15 +1,15 @@
 #include <poincare/horizontal_layout.h>
 #include <poincare/empty_layout.h>
 #include <poincare/layout_helper.h>
+#include <poincare/nth_root_layout.h>
 #include <poincare/serialization_helper.h>
+#include <algorithm>
 
 namespace Poincare {
 
-static inline KDCoordinate maxCoordinate(KDCoordinate c1, KDCoordinate c2) { return c1 > c2 ? c1 : c2; }
-
 // LayoutNode
 
-void HorizontalLayoutNode::moveCursorLeft(LayoutCursor * cursor, bool * shouldRecomputeLayout) {
+void HorizontalLayoutNode::moveCursorLeft(LayoutCursor * cursor, bool * shouldRecomputeLayout, bool forSelection) {
   if (this == cursor->layoutNode()) {
     if (cursor->position() == LayoutCursor::Position::Left) {
       // Case: Left. Ask the parent.
@@ -49,7 +49,7 @@ void HorizontalLayoutNode::moveCursorLeft(LayoutCursor * cursor, bool * shouldRe
   cursor->moveLeft(shouldRecomputeLayout);
 }
 
-void HorizontalLayoutNode::moveCursorRight(LayoutCursor * cursor, bool * shouldRecomputeLayout) {
+void HorizontalLayoutNode::moveCursorRight(LayoutCursor * cursor, bool * shouldRecomputeLayout, bool forSelection) {
   if (this == cursor->layoutNode()) {
     if (cursor->position() == LayoutCursor::Position::Right) {
       // Case: Right. Ask the parent.
@@ -180,14 +180,63 @@ LayoutNode * HorizontalLayoutNode::layoutToPointWhenInserting(Expression * corre
 }
 
 int HorizontalLayoutNode::serialize(char * buffer, int bufferSize, Preferences::PrintFloatMode floatDisplayMode, int numberOfSignificantDigits) const {
-  if (numberOfChildren() == 0) {
-    if (bufferSize == 0) {
-      return -1;
-    }
+  return serializeChildrenBetweenIndexes(buffer, bufferSize, floatDisplayMode, numberOfSignificantDigits, false);
+}
+
+int HorizontalLayoutNode::serializeChildrenBetweenIndexes(char * buffer, int bufferSize, Preferences::PrintFloatMode floatDisplayMode, int numberOfSignificantDigits, bool forceIndexes, int firstIndex, int lastIndex) const {
+  if (bufferSize == 0) {
+    return -1;
+  }
+  int childrenCount = numberOfChildren();
+  if (childrenCount == 0 || bufferSize == 1) {
     buffer[0] = 0;
     return 0;
   }
-  return SerializationHelper::Infix(this, buffer, bufferSize, floatDisplayMode, numberOfSignificantDigits, "");
+
+  int numberOfChar = 0;
+  // Write the children, adding multiplication signs if needed
+  int index1 = forceIndexes ? firstIndex : 0;
+  int index2 = forceIndexes ? lastIndex + 1 : childrenCount;
+  assert(index1 >= 0 && index2 <= childrenCount && index1 <= index2);
+  LayoutNode * currentChild = childAtIndex(index1);
+  LayoutNode * nextChild = nullptr;
+  for (int i = index1; i < index2; i++) {
+    // Write the child
+    numberOfChar+= currentChild->serialize(buffer + numberOfChar, bufferSize - numberOfChar, floatDisplayMode, numberOfSignificantDigits);
+    if (i != childrenCount - 1) {
+      nextChild = childAtIndex(i+1);
+      // Write the multiplication sign if needed
+      LayoutNode::Type nextChildType = nextChild->type();
+      if ((nextChildType == LayoutNode::Type::AbsoluteValueLayout
+            || nextChildType == LayoutNode::Type::BinomialCoefficientLayout
+            || nextChildType == LayoutNode::Type::CeilingLayout
+            || nextChildType == LayoutNode::Type::ConjugateLayout
+            || nextChildType == LayoutNode::Type::CeilingLayout
+            || nextChildType == LayoutNode::Type::FloorLayout
+            || nextChildType == LayoutNode::Type::IntegralLayout
+            || (nextChildType == LayoutNode::Type::NthRootLayout
+              && !static_cast<NthRootLayoutNode *>(nextChild)->isSquareRoot())
+            || nextChildType == LayoutNode::Type::ProductLayout
+            || nextChildType == LayoutNode::Type::SumLayout)
+          && currentChild->canBeOmittedMultiplicationLeftFactor())
+      {
+        assert(nextChildType != LayoutNode::Type::HorizontalLayout);
+        numberOfChar += SerializationHelper::CodePoint(buffer+numberOfChar, bufferSize - numberOfChar, '*');
+        if (numberOfChar >= bufferSize-1) {
+          assert(buffer[bufferSize - 1] == 0);
+          return bufferSize - 1;
+        }
+      }
+    }
+    currentChild = nextChild;
+  }
+  if (numberOfChar >= bufferSize-1) {
+    assert(buffer[bufferSize - 1] == 0);
+    return bufferSize - 1;
+  }
+
+  assert(buffer[numberOfChar] == 0);
+  return numberOfChar;
 }
 
 bool HorizontalLayoutNode::hasText() const {
@@ -209,8 +258,8 @@ KDSize HorizontalLayoutNode::computeSize() {
   for (LayoutNode * l : children()) {
     KDSize childSize = l->layoutSize();
     totalWidth += childSize.width();
-    maxUnderBaseline = maxCoordinate(maxUnderBaseline, childSize.height() - l->baseline());
-    maxAboveBaseline = maxCoordinate(maxAboveBaseline, l->baseline());
+    maxUnderBaseline = std::max<KDCoordinate>(maxUnderBaseline, childSize.height() - l->baseline());
+    maxAboveBaseline = std::max(maxAboveBaseline, l->baseline());
   }
   return KDSize(totalWidth, maxUnderBaseline + maxAboveBaseline);
 }
@@ -218,7 +267,7 @@ KDSize HorizontalLayoutNode::computeSize() {
 KDCoordinate HorizontalLayoutNode::computeBaseline() {
   KDCoordinate result = 0;
   for (LayoutNode * l : children()) {
-    result = maxCoordinate(result, l->baseline());
+    result = std::max(result, l->baseline());
   }
   return result;
 }
@@ -236,6 +285,37 @@ KDPoint HorizontalLayoutNode::positionOfChild(LayoutNode * l) {
   KDCoordinate y = baseline() - l->baseline();
   return KDPoint(x, y);
 }
+
+KDRect HorizontalLayoutNode::relativeSelectionRect(const Layout * selectionStart, const Layout * selectionEnd) const {
+  assert(selectionStart != nullptr && !selectionStart->isUninitialized());
+  assert(selectionEnd != nullptr && !selectionEnd->isUninitialized());
+  HorizontalLayout thisLayout = HorizontalLayout(const_cast<HorizontalLayoutNode *>(this));
+  assert(thisLayout.hasChild(*selectionStart));
+  assert(thisLayout.hasChild(*selectionEnd));
+  assert(thisLayout.indexOfChild(*selectionStart) <= thisLayout.indexOfChild(*selectionEnd));
+
+  // Compute the positions
+  KDCoordinate selectionXStart = const_cast<HorizontalLayoutNode *>(this)->positionOfChild(selectionStart->node()).x();
+  KDCoordinate selectionXEnd = const_cast<HorizontalLayoutNode *>(this)->positionOfChild(selectionEnd->node()).x() + selectionEnd->layoutSize().width();
+  KDCoordinate drawWidth = selectionXEnd - selectionXStart;
+
+  // Compute the height
+  int firstSelectedNodeIndex = thisLayout.indexOfChild(*selectionStart);
+  int secondSelectedNodeIndex = thisLayout.indexOfChild(*selectionEnd);
+  if (firstSelectedNodeIndex == 0 && secondSelectedNodeIndex == numberOfChildren() - 1) {
+    return KDRect(KDPointZero, const_cast<HorizontalLayoutNode *>(this)->layoutSize());
+  }
+  KDCoordinate maxUnderBaseline = 0;
+  KDCoordinate maxAboveBaseline = 0;
+  for (int i = firstSelectedNodeIndex; i <= secondSelectedNodeIndex; i++) {
+    Layout childi = thisLayout.childAtIndex(i);
+    KDSize childSize = childi.layoutSize();
+    maxUnderBaseline = std::max<KDCoordinate>(maxUnderBaseline, childSize.height() - childi.baseline());
+    maxAboveBaseline = std::max(maxAboveBaseline, childi.baseline());
+  }
+  return KDRect(KDPoint(selectionXStart, const_cast<HorizontalLayoutNode *>(this)->baseline() - maxAboveBaseline), KDSize(drawWidth, maxUnderBaseline + maxAboveBaseline));
+}
+
 
 // Private
 
@@ -366,6 +446,22 @@ bool HorizontalLayoutNode::willReplaceChild(LayoutNode * oldChild, LayoutNode * 
   return true;
 }
 
+void HorizontalLayoutNode::render(KDContext * ctx, KDPoint p, KDColor expressionColor, KDColor backgroundColor, Layout * selectionStart, Layout * selectionEnd, KDColor selectionColor) {
+  // Fill the background
+  KDSize s = layoutSize();
+  ctx->fillRect(KDRect(p, s), backgroundColor);
+  // Fill the selection background
+  HorizontalLayout thisLayout = HorizontalLayout(this);
+  bool childrenAreSelected = selectionStart != nullptr && selectionEnd != nullptr
+    && !selectionStart->isUninitialized() && !selectionStart->isUninitialized()
+    && thisLayout.hasChild(*selectionStart);
+  if (childrenAreSelected) {
+    assert(thisLayout.hasChild(*selectionEnd));
+    KDRect selectionRectangle = HorizontalLayout(this).relativeSelectionRect(selectionStart, selectionEnd);
+    ctx->fillRect(selectionRectangle.translatedBy(p), selectionColor);
+  }
+}
+
 // HorizontalLayout
 
 void HorizontalLayout::addOrMergeChildAtIndex(Layout l, int index, bool removeEmptyChildren, LayoutCursor * cursor) {
@@ -460,6 +556,10 @@ Layout HorizontalLayout::squashUnaryHierarchyInPlace() {
     return child;
   }
   return *this;
+}
+
+void HorizontalLayout::serializeChildren(int firstIndex, int lastIndex, char * buffer, int bufferSize) {
+  static_cast<HorizontalLayoutNode *>(node())->serializeChildrenBetweenIndexes(buffer, bufferSize, Poincare::Preferences::sharedPreferences()->displayMode(), Poincare::Preferences::sharedPreferences()->numberOfSignificantDigits(), true, firstIndex, lastIndex);
 }
 
 void HorizontalLayout::removeEmptyChildBeforeInsertionAtIndex(int * index, int * currentNumberOfChildren, bool shouldRemoveOnLeft, LayoutCursor * cursor) {

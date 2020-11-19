@@ -78,8 +78,8 @@ View * NestedMenuController::ListController::view() {
 
 void NestedMenuController::ListController::didBecomeFirstResponder() {
   m_selectableTableView->reloadData();
-  m_selectableTableView->selectCellAtLocation(0, m_firstSelectedRow);
   Container::activeApp()->setFirstResponder(m_selectableTableView);
+  m_selectableTableView->selectCellAtLocation(0, m_firstSelectedRow);
 }
 
 void NestedMenuController::ListController::setFirstSelectedRow(int firstSelectedRow) {
@@ -90,12 +90,16 @@ void NestedMenuController::ListController::setFirstSelectedRow(int firstSelected
 
 NestedMenuController::NestedMenuController(Responder * parentResponder, I18n::Message title) :
   StackViewController(parentResponder, &m_listController, KDColorWhite, Palette::PurpleBright, Palette::PurpleDark),
-  m_selectableTableView(&m_listController, this, this),
+  m_selectableTableView(&m_listController, this, this, this),
   m_listController(this, &m_selectableTableView, title),
   m_sender(nullptr)
 {
   m_selectableTableView.setMargins(0);
   m_selectableTableView.setDecoratorType(ScrollView::Decorator::Type::None);
+}
+
+void NestedMenuController::setTitle(I18n::Message title) {
+  m_listController.setTitle(title);
 }
 
 bool NestedMenuController::handleEvent(Ion::Events::Event event) {

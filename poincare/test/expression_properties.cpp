@@ -1,13 +1,12 @@
-#include <quiz.h>
 #include <apps/shared/global_context.h>
-#include <poincare/decimal.h>
-#include <assert.h>
 #include "helper.h"
-#include "tree/helpers.h"
 
 using namespace Poincare;
 
 QUIZ_CASE(poincare_properties_is_number) {
+  quiz_assert(BasedInteger::Builder("2",Integer::Base::Binary).isNumber());
+  quiz_assert(BasedInteger::Builder("2",Integer::Base::Decimal).isNumber());
+  quiz_assert(BasedInteger::Builder("2",Integer::Base::Hexadecimal).isNumber());
   quiz_assert(Decimal::Builder("2",3).isNumber());
   quiz_assert(Float<float>::Builder(1.0f).isNumber());
   quiz_assert(Infinity::Builder(true).isNumber());
@@ -35,13 +34,13 @@ QUIZ_CASE(poincare_properties_is_parametered_expression) {
 }
 
 void assert_expression_has_property(const char * expression, Context * context, Expression::ExpressionTest test) {
-  Expression e = parse_expression(expression, false);
-  quiz_assert_print_if_failure(e.recursivelyMatches(test, context, true), expression);
+  Expression e = parse_expression(expression, context, false);
+  quiz_assert_print_if_failure(e.recursivelyMatches(test, context), expression);
 }
 
 void assert_expression_has_not_property(const char * expression, Context * context, Expression::ExpressionTest test) {
-  Expression e = parse_expression(expression, false);
-  quiz_assert_print_if_failure(!e.recursivelyMatches(test, context, true), expression);
+  Expression e = parse_expression(expression, context, false);
+  quiz_assert_print_if_failure(!e.recursivelyMatches(test, context), expression);
 }
 
 QUIZ_CASE(poincare_properties_is_approximate) {
@@ -49,7 +48,7 @@ QUIZ_CASE(poincare_properties_is_approximate) {
   assert_expression_has_property("3.4", &context, Expression::IsApproximate);
   assert_expression_has_property("2.3+1", &context, Expression::IsApproximate);
   assert_expression_has_not_property("a", &context, Expression::IsApproximate);
-  assert_simplify("42.3→a");
+  assert_reduce("42.3→a");
   assert_expression_has_property("a", &context, Expression::IsApproximate);
   Ion::Storage::sharedStorage()->recordNamed("a.exp").destroy();
 }
@@ -69,13 +68,13 @@ QUIZ_CASE(poincare_properties_is_matrix) {
 
 void assert_expression_is_deep_matrix(const char * expression) {
   Shared::GlobalContext context;
-  Expression e = parse_expression(expression, false);
+  Expression e = parse_expression(expression, &context, false);
   quiz_assert_print_if_failure(e.deepIsMatrix(&context), expression);
 }
 
 void assert_expression_is_not_deep_matrix(const char * expression) {
   Shared::GlobalContext context;
-  Expression e = parse_expression(expression, false);
+  Expression e = parse_expression(expression, &context, false);
   quiz_assert_print_if_failure(!e.deepIsMatrix(&context), expression);
 }
 
@@ -94,7 +93,7 @@ QUIZ_CASE(poincare_properties_is_infinity) {
   assert_expression_has_property("3.4+inf", &context, Expression::IsInfinity);
   assert_expression_has_not_property("2.3+1", &context, Expression::IsInfinity);
   assert_expression_has_not_property("a", &context, Expression::IsInfinity);
-  assert_simplify("42.3+inf→a");
+  assert_reduce("42.3+inf→a");
   assert_expression_has_property("a", &context, Expression::IsInfinity);
   Ion::Storage::sharedStorage()->recordNamed("a.exp").destroy();
 }
@@ -105,8 +104,8 @@ constexpr Poincare::ExpressionNode::Sign Unknown = Poincare::ExpressionNode::Sig
 
 void assert_reduced_expression_sign(const char * expression, Poincare::ExpressionNode::Sign sign, Preferences::ComplexFormat complexFormat = Cartesian, Preferences::AngleUnit angleUnit = Radian) {
   Shared::GlobalContext globalContext;
-  Expression e = parse_expression(expression, false);
-  e = e.reduce(&globalContext, complexFormat, angleUnit);
+  Expression e = parse_expression(expression, &globalContext, false);
+  e = e.reduce(ExpressionNode::ReductionContext(&globalContext, complexFormat, angleUnit, ExpressionNode::ReductionTarget::SystemForApproximation));
   quiz_assert_print_if_failure(e.sign(&globalContext) == sign, expression);
 }
 
@@ -116,6 +115,12 @@ QUIZ_CASE(poincare_properties_decimal_sign) {
   quiz_assert(Decimal::Builder(2, -3).sign() == ExpressionNode::Sign::Positive);
   quiz_assert(Decimal::Builder(2, 3).sign() == ExpressionNode::Sign::Positive);
   quiz_assert(Decimal::Builder(0, 1).sign() == ExpressionNode::Sign::Positive);
+}
+
+QUIZ_CASE(poincare_properties_based_integer_sign) {
+  quiz_assert(BasedInteger::Builder(2, Integer::Base::Binary).sign() == ExpressionNode::Sign::Positive);
+  quiz_assert(BasedInteger::Builder(2, Integer::Base::Decimal).sign() == ExpressionNode::Sign::Positive);
+  quiz_assert(BasedInteger::Builder(2, Integer::Base::Hexadecimal).sign() == ExpressionNode::Sign::Positive);
 }
 
 QUIZ_CASE(poincare_properties_rational_sign) {
@@ -150,7 +155,7 @@ QUIZ_CASE(poincare_properties_sign) {
   assert_reduced_expression_sign("sign(π)", Positive);
   assert_reduced_expression_sign("sign(-π)", Negative);
   assert_reduced_expression_sign("a", Unknown);
-  assert_simplify("42→a");
+  assert_reduce("42→a");
   assert_reduced_expression_sign("a", Positive);
   Ion::Storage::sharedStorage()->recordNamed("a.exp").destroy();
 }
@@ -158,14 +163,14 @@ QUIZ_CASE(poincare_properties_sign) {
 void assert_expression_is_real(const char * expression) {
   Shared::GlobalContext context;
   // isReal can be call only on reduced expressions
-  Expression e = parse_expression(expression, false).reduce(&context, Cartesian, Radian);
+  Expression e = parse_expression(expression, &context, false).reduce(ExpressionNode::ReductionContext(&context, Cartesian, Radian, ExpressionNode::ReductionTarget::SystemForApproximation));
   quiz_assert_print_if_failure(e.isReal(&context), expression);
 }
 
 void assert_expression_is_not_real(const char * expression) {
   Shared::GlobalContext context;
   // isReal can be call only on reduced expressions
-  Expression e = parse_expression(expression, false).reduce(&context, Cartesian, Radian);
+  Expression e = parse_expression(expression, &context, false).reduce(ExpressionNode::ReductionContext(&context, Cartesian, Radian, ExpressionNode::ReductionTarget::SystemForApproximation));
   quiz_assert_print_if_failure(!e.isReal(&context), expression);
 }
 
@@ -201,8 +206,9 @@ QUIZ_CASE(poincare_properties_is_real) {
 
 void assert_reduced_expression_polynomial_degree(const char * expression, int degree, const char * symbolName = "x", Preferences::ComplexFormat complexFormat = Cartesian, Preferences::AngleUnit angleUnit = Radian) {
   Shared::GlobalContext globalContext;
-  Expression e = parse_expression(expression, false);
-  Expression result = e.reduce(&globalContext, complexFormat, angleUnit);
+  Expression e = parse_expression(expression, &globalContext, false);
+  Expression result = e.reduce(ExpressionNode::ReductionContext(&globalContext, complexFormat, angleUnit, SystemForApproximation));
+
   quiz_assert_print_if_failure(result.polynomialDegree(&globalContext, symbolName) == degree, expression);
 }
 
@@ -226,14 +232,14 @@ QUIZ_CASE(poincare_properties_polynomial_degree) {
   assert_reduced_expression_polynomial_degree("π×x", 1);
   assert_reduced_expression_polynomial_degree("√(-1)×x", -1, "x", Real);
   // f: x→x^2+πx+1
-  assert_simplify("1+π×x+x^2→f(x)");
+  assert_reduce("1+π×x+x^2→f(x)");
   assert_reduced_expression_polynomial_degree("f(x)", 2);
   Ion::Storage::sharedStorage()->recordNamed("f.func").destroy();
 }
 
 void assert_reduced_expression_has_characteristic_range(Expression e, float range, Preferences::AngleUnit angleUnit = Preferences::AngleUnit::Degree) {
   Shared::GlobalContext globalContext;
-  e = e.reduce(&globalContext, Preferences::ComplexFormat::Cartesian, angleUnit);
+  e = e.reduce(ExpressionNode::ReductionContext(&globalContext, Preferences::ComplexFormat::Cartesian, angleUnit, ExpressionNode::ReductionTarget::SystemForApproximation));
   if (std::isnan(range)) {
     quiz_assert(std::isnan(e.characteristicXRange(&globalContext, angleUnit)));
   } else {
@@ -243,52 +249,52 @@ void assert_reduced_expression_has_characteristic_range(Expression e, float rang
 
 QUIZ_CASE(poincare_properties_characteristic_range) {
   // cos(x), degree
-  assert_reduced_expression_has_characteristic_range(Cosine::Builder(Symbol::Builder(UCodePointUnknownX)), 360.0f);
+  assert_reduced_expression_has_characteristic_range(Cosine::Builder(Symbol::Builder(UCodePointUnknown)), 360.0f);
   // cos(-x), degree
-  assert_reduced_expression_has_characteristic_range(Cosine::Builder(Opposite::Builder(Symbol::Builder(UCodePointUnknownX))), 360.0f);
+  assert_reduced_expression_has_characteristic_range(Cosine::Builder(Opposite::Builder(Symbol::Builder(UCodePointUnknown))), 360.0f);
   // cos(x), radian
-  assert_reduced_expression_has_characteristic_range(Cosine::Builder(Symbol::Builder(UCodePointUnknownX)), 2.0f*M_PI, Preferences::AngleUnit::Radian);
+  assert_reduced_expression_has_characteristic_range(Cosine::Builder(Symbol::Builder(UCodePointUnknown)), 2.0f*M_PI, Preferences::AngleUnit::Radian);
   // cos(-x), radian
-  assert_reduced_expression_has_characteristic_range(Cosine::Builder(Opposite::Builder(Symbol::Builder(UCodePointUnknownX))), 2.0f*M_PI, Preferences::AngleUnit::Radian);
+  assert_reduced_expression_has_characteristic_range(Cosine::Builder(Opposite::Builder(Symbol::Builder(UCodePointUnknown))), 2.0f*M_PI, Preferences::AngleUnit::Radian);
   // sin(9x+10), degree
-  assert_reduced_expression_has_characteristic_range(Sine::Builder(Addition::Builder(Multiplication::Builder(Rational::Builder(9),Symbol::Builder(UCodePointUnknownX)),Rational::Builder(10))), 40.0f);
+  assert_reduced_expression_has_characteristic_range(Sine::Builder(Addition::Builder(Multiplication::Builder(Rational::Builder(9),Symbol::Builder(UCodePointUnknown)),Rational::Builder(10))), 40.0f);
   // sin(9x+10)+cos(x/2), degree
-  assert_reduced_expression_has_characteristic_range(Addition::Builder(Sine::Builder(Addition::Builder(Multiplication::Builder(Rational::Builder(9),Symbol::Builder(UCodePointUnknownX)),Rational::Builder(10))),Cosine::Builder(Division::Builder(Symbol::Builder(UCodePointUnknownX),Rational::Builder(2)))), 720.0f);
+  assert_reduced_expression_has_characteristic_range(Addition::Builder(Sine::Builder(Addition::Builder(Multiplication::Builder(Rational::Builder(9),Symbol::Builder(UCodePointUnknown)),Rational::Builder(10))),Cosine::Builder(Division::Builder(Symbol::Builder(UCodePointUnknown),Rational::Builder(2)))), 720.0f);
   // sin(9x+10)+cos(x/2), radian
-  assert_reduced_expression_has_characteristic_range(Addition::Builder(Sine::Builder(Addition::Builder(Multiplication::Builder(Rational::Builder(9),Symbol::Builder(UCodePointUnknownX)),Rational::Builder(10))),Cosine::Builder(Division::Builder(Symbol::Builder(UCodePointUnknownX),Rational::Builder(2)))), 4.0f*M_PI, Preferences::AngleUnit::Radian);
+  assert_reduced_expression_has_characteristic_range(Addition::Builder(Sine::Builder(Addition::Builder(Multiplication::Builder(Rational::Builder(9),Symbol::Builder(UCodePointUnknown)),Rational::Builder(10))),Cosine::Builder(Division::Builder(Symbol::Builder(UCodePointUnknown),Rational::Builder(2)))), 4.0f*M_PI, Preferences::AngleUnit::Radian);
   // x, degree
-  assert_reduced_expression_has_characteristic_range(Symbol::Builder(UCodePointUnknownX), NAN);
+  assert_reduced_expression_has_characteristic_range(Symbol::Builder(UCodePointUnknown), NAN);
   // cos(3)+2, degree
   assert_reduced_expression_has_characteristic_range(Addition::Builder(Cosine::Builder(Rational::Builder(3)),Rational::Builder(2)), 0.0f);
   // log(cos(40x), degree
-  assert_reduced_expression_has_characteristic_range(CommonLogarithm::Builder(Cosine::Builder(Multiplication::Builder(Rational::Builder(40),Symbol::Builder(UCodePointUnknownX)))), 9.0f);
+  assert_reduced_expression_has_characteristic_range(CommonLogarithm::Builder(Cosine::Builder(Multiplication::Builder(Rational::Builder(40),Symbol::Builder(UCodePointUnknown)))), 9.0f);
   // cos(cos(x)), degree
-  assert_reduced_expression_has_characteristic_range(Cosine::Builder((Expression)Cosine::Builder(Symbol::Builder(UCodePointUnknownX))), 360.0f);
+  assert_reduced_expression_has_characteristic_range(Cosine::Builder((Expression)Cosine::Builder(Symbol::Builder(UCodePointUnknown))), 360.0f);
   // f(x) with f : x --> cos(x), degree
-  assert_simplify("cos(x)→f(x)");
-  assert_reduced_expression_has_characteristic_range(Function::Builder("f",1,Symbol::Builder(UCodePointUnknownX)), 360.0f);
+  assert_reduce("cos(x)→f(x)");
+  assert_reduced_expression_has_characteristic_range(Function::Builder("f",1,Symbol::Builder(UCodePointUnknown)), 360.0f);
   Ion::Storage::sharedStorage()->recordNamed("f.func").destroy();
 }
 
 void assert_expression_has_variables(const char * expression, const char * variables[], int trueNumberOfVariables) {
-  Expression e = parse_expression(expression, false);
-  constexpr static int k_maxVariableSize = Poincare::SymbolAbstract::k_maxNameSize;
-  char variableBuffer[Expression::k_maxNumberOfVariables+1][k_maxVariableSize] = {{0}};
   Shared::GlobalContext globalContext;
-  int numberOfVariables = e.getVariables(&globalContext, [](const char * symbol) { return true; }, (char *)variableBuffer, k_maxVariableSize);
+  Expression e = parse_expression(expression, &globalContext, false);
+  constexpr static int k_maxVariableSize = Poincare::SymbolAbstract::k_maxNameSize;
+  char variableBuffer[Expression::k_maxNumberOfVariables][k_maxVariableSize] = {{0}};
+  int numberOfVariables = e.getVariables(&globalContext, [](const char * symbol, Poincare::Context * context) { return true; }, (char *)variableBuffer, k_maxVariableSize);
   quiz_assert_print_if_failure(trueNumberOfVariables == numberOfVariables, expression);
   if (numberOfVariables < 0) {
     // Too many variables
     return;
   }
   int index = 0;
-  while (variableBuffer[index][0] != 0 || variables[index][0] != 0) {
+  while (index < Expression::k_maxNumberOfVariables && (variableBuffer[index][0] != 0 || variables[index][0] != 0)) {
     quiz_assert_print_if_failure(strcmp(variableBuffer[index], variables[index]) == 0, expression);
     index++;
   }
 }
 
-QUIZ_CASE(poincare_preperties_get_variables) {
+QUIZ_CASE(poincare_properties_get_variables) {
   const char * variableBuffer1[] = {"x","y",""};
   assert_expression_has_variables("x+y", variableBuffer1, 2);
   const char * variableBuffer2[] = {"x","y","z","t",""};
@@ -301,24 +307,29 @@ QUIZ_CASE(poincare_preperties_get_variables) {
   assert_expression_has_variables("BBBBBB", variableBuffer5, 1);
   const char * variableBuffer6[] = {""};
   assert_expression_has_variables("a+b+c+d+e+f+g+h+i+j+k+l+m+n+o+p+q+r+s+t+aa+bb+cc+dd+ee+ff+gg+hh+ii+jj+kk+ll+mm+nn+oo", variableBuffer6, -1);
+  assert_expression_has_variables("a+b+c+d+e+f+g", variableBuffer6, -1);
   // f: x→1+πx+x^2+toto
-  assert_simplify("1+π×x+x^2+toto→f(x)");
+  assert_reduce("1+π×x+x^2+toto→f(x)");
   const char * variableBuffer7[] = {"tata","toto", ""};
   assert_expression_has_variables("f(tata)", variableBuffer7, 2);
   Ion::Storage::sharedStorage()->recordNamed("f.func").destroy();
+
+  const char * variableBuffer8[] = {"y", ""};
+  assert_expression_has_variables("diff(3x,x,0)y-2", variableBuffer8, 1);
+  const char * variableBuffer9[] = {"a", "b", "c", "d", "e", "f"};
+  assert_expression_has_variables("a+b+c+d+e+f", variableBuffer9, 6);
 }
 
-void assert_reduced_expression_has_polynomial_coefficient(const char * expression, const char * symbolName, const char ** coefficients, Preferences::ComplexFormat complexFormat = Cartesian, Preferences::AngleUnit angleUnit = Radian) {
+void assert_reduced_expression_has_polynomial_coefficient(const char * expression, const char * symbolName, const char ** coefficients, Preferences::ComplexFormat complexFormat = Cartesian, Preferences::AngleUnit angleUnit = Radian, ExpressionNode::SymbolicComputation symbolicComputation = ReplaceAllDefinedSymbolsWithDefinition) {
   Shared::GlobalContext globalContext;
-  Expression e = parse_expression(expression, false);
-  e = e.reduce(&globalContext, complexFormat, angleUnit, SystemForAnalysis);
+  Expression e = parse_expression(expression, &globalContext, false);
+  e = e.reduce(ExpressionNode::ReductionContext(&globalContext, complexFormat, angleUnit, SystemForAnalysis, symbolicComputation));
   Expression coefficientBuffer[Poincare::Expression::k_maxNumberOfPolynomialCoefficients];
-  int d = e.getPolynomialReducedCoefficients(symbolName, coefficientBuffer, &globalContext, complexFormat, Radian);
+  int d = e.getPolynomialReducedCoefficients(symbolName, coefficientBuffer, &globalContext, complexFormat, Radian, symbolicComputation);
   for (int i = 0; i <= d; i++) {
-    Expression f = parse_expression(coefficients[i], false);
-    quiz_assert(!f.isUninitialized());
-    coefficientBuffer[i] = coefficientBuffer[i].reduce(&globalContext, complexFormat, angleUnit);
-    f = f.reduce(&globalContext, complexFormat, angleUnit);
+    Expression f = parse_expression(coefficients[i], &globalContext, false);
+    coefficientBuffer[i] = coefficientBuffer[i].reduce(ExpressionNode::ReductionContext(&globalContext, complexFormat, angleUnit, SystemForAnalysis, symbolicComputation));
+    f = f.reduce(ExpressionNode::ReductionContext(&globalContext, complexFormat, angleUnit, SystemForAnalysis, symbolicComputation));
     quiz_assert_print_if_failure(coefficientBuffer[i].isIdenticalTo(f), expression);
   }
   quiz_assert_print_if_failure(coefficients[d+1] == 0, expression);
@@ -334,13 +345,97 @@ QUIZ_CASE(poincare_properties_get_polynomial_coefficients) {
   //assert_reduced_expression_has_polynomial_coefficient("2×(n+1)^3-4n+32×x", "n", coefficient2);
   const char * coefficient3[] = {"1", "-π", "1", 0}; //x^2-π×x+1
   assert_reduced_expression_has_polynomial_coefficient("x^2-π×x+1", "x", coefficient3);
+
   // f: x→x^2+Px+1
+  assert_reduce("1+π×x+x^2→f(x)");
   const char * coefficient4[] = {"1", "π", "1", 0}; //x^2+π×x+1
-  assert_simplify("1+π×x+x^2→f(x)");
   assert_reduced_expression_has_polynomial_coefficient("f(x)", "x", coefficient4);
   const char * coefficient5[] = {"0", "𝐢", 0}; //√(-1)x
   assert_reduced_expression_has_polynomial_coefficient("√(-1)x", "x", coefficient5);
   const char * coefficient6[] = {0}; //√(-1)x
   assert_reduced_expression_has_polynomial_coefficient("√(-1)x", "x", coefficient6, Real);
+
+  // 3 -> x
+  assert_reduce("3→x");
+  const char * coefficient7[] = {"4", 0};
+  assert_reduced_expression_has_polynomial_coefficient("x+1", "x", coefficient7 );
+  const char * coefficient8[] = {"2", "1", 0};
+  assert_reduced_expression_has_polynomial_coefficient("x+2", "x", coefficient8, Real, Radian, DoNotReplaceAnySymbol);
+  assert_reduced_expression_has_polynomial_coefficient("x+2", "x", coefficient8, Real, Radian, ReplaceDefinedFunctionsWithDefinitions);
+  assert_reduced_expression_has_polynomial_coefficient("f(x)", "x", coefficient4, Cartesian, Radian, ReplaceDefinedFunctionsWithDefinitions);
+
+  // Clear the storage
   Ion::Storage::sharedStorage()->recordNamed("f.func").destroy();
+  Ion::Storage::sharedStorage()->recordNamed("x.exp").destroy();
+}
+
+void assert_reduced_expression_unit_is(const char * expression, const char * unit) {
+  Shared::GlobalContext globalContext;
+  ExpressionNode::ReductionContext redContext(&globalContext, Real, Degree, SystemForApproximation);
+  Expression e = parse_expression(expression, &globalContext, false);
+  e = e.reduce(redContext);
+  Expression u1;
+  e = e.removeUnit(&u1);
+  Expression e2 = parse_expression(unit, &globalContext, false);
+  Expression u2;
+  e2 = e2.reduce(redContext);
+  e2.removeUnit(&u2);
+  quiz_assert_print_if_failure(u1.isUninitialized() == u2.isUninitialized() && (u1.isUninitialized() || u1.isIdenticalTo(u2)), expression);
+}
+
+QUIZ_CASE(poincare_properties_remove_unit) {
+  assert_reduced_expression_unit_is("_km", "_m");
+  assert_reduced_expression_unit_is("_min/_km", "_m^(-1)×_s");
+  assert_reduced_expression_unit_is("_km^3", "_m^3");
+  assert_reduced_expression_unit_is("1_m+_km", "_m");
+  assert_reduced_expression_unit_is("_L^2×3×_s", "_m^6×_s");
+}
+
+void assert_seconds_split_to(double totalSeconds, const char * splittedTime, Context * context, Preferences::ComplexFormat complexFormat, Preferences::AngleUnit angleUnit) {
+  Expression time = Unit::BuildTimeSplit(totalSeconds, context, complexFormat, angleUnit);
+  constexpr static int bufferSize = 100;
+  char buffer[bufferSize];
+  time.serialize(buffer, bufferSize, DecimalMode);
+  quiz_assert_print_if_failure(strcmp(buffer, splittedTime) == 0, splittedTime);
+}
+
+Expression extract_unit(const char * expression) {
+  Shared::GlobalContext globalContext;
+  ExpressionNode::ReductionContext reductionContext = ExpressionNode::ReductionContext(&globalContext, Cartesian, Degree, User, ReplaceAllSymbolsWithUndefined, NoUnitConversion);
+  Expression e = parse_expression(expression, &globalContext, false).reduce(reductionContext);
+  Expression unit;
+  e.removeUnit(&unit);
+  return unit;
+}
+
+QUIZ_CASE(poincare_expression_unit_helper) {
+  // 1. Time
+  Expression s = extract_unit("_s");
+  quiz_assert(s.type() == ExpressionNode::Type::Unit && static_cast<Unit &>(s).isSecond());
+  quiz_assert(!static_cast<Unit &>(s).isMeter());
+
+  Shared::GlobalContext globalContext;
+  assert_seconds_split_to(1234567890, "39×_year+1×_month+13×_day+19×_h+1×_min+30×_s", &globalContext, Cartesian, Degree);
+  assert_seconds_split_to(-122, "-2×_min-2×_s", &globalContext, Cartesian, Degree);
+
+  // 2. Speed
+  Expression meterPerSecond = extract_unit("_m×_s^-1");
+  quiz_assert(Unit::IsSISpeed(meterPerSecond));
+
+  // 3. Volume
+  Expression meter3 = extract_unit("_m^3");
+  quiz_assert(Unit::IsSIVolume(meter3));
+
+  // 4. Energy
+  Expression kilogramMeter2PerSecond2 = extract_unit("_kg×_m^2×_s^-2");
+  quiz_assert(Unit::IsSIEnergy(kilogramMeter2PerSecond2));
+  Expression kilogramMeter3PerSecond2 = extract_unit("_kg×_m^3×_s^-2");
+  quiz_assert(!Unit::IsSIEnergy(kilogramMeter3PerSecond2));
+
+  // 5. International System
+  quiz_assert(Unit::IsSI(kilogramMeter2PerSecond2));
+  quiz_assert(Unit::IsSI(meter3));
+  quiz_assert(Unit::IsSI(meterPerSecond));
+  Expression joule = extract_unit("_J");
+  quiz_assert(!Unit::IsSI(joule));
 }

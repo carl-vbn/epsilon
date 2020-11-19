@@ -16,8 +16,6 @@
 
 namespace Poincare {
 
-static inline int minInt(int x, int y) { return x < y ? x : y; }
-
 constexpr char Symbol::k_ans[];
 
 SymbolNode::SymbolNode(const char * newName, int length) : SymbolAbstractNode() {
@@ -35,43 +33,43 @@ int SymbolNode::polynomialDegree(Context * context, const char * symbolName) con
   return 0;
 }
 
-int SymbolNode::getPolynomialCoefficients(Context * context, const char * symbolName, Expression coefficients[]) const {
-  return Symbol(this).getPolynomialCoefficients(context, symbolName, coefficients);
+int SymbolNode::getPolynomialCoefficients(Context * context, const char * symbolName, Expression coefficients[], ExpressionNode::SymbolicComputation symbolicComputation) const {
+  return Symbol(this).getPolynomialCoefficients(context, symbolName, coefficients, symbolicComputation);
 }
 
-int SymbolNode::getVariables(Context * context, isVariableTest isVariable, char * variables, int maxSizeVariable) const {
+int SymbolNode::getVariables(Context * context, isVariableTest isVariable, char * variables, int maxSizeVariable, int nextVariableIndex) const {
   // variables is in fact of type char[k_maxNumberOfVariables][maxSizeVariable]
-  size_t variablesIndex = 0;
-  while(variables[variablesIndex] != 0) {
-    variablesIndex+= maxSizeVariable;
-  }
-  if (isVariable(m_name)) {
+  if (isVariable(m_name, context)) {
     int index = 0;
-    while (variables[index] != 0) {
+    while (index < maxSizeVariable*Expression::k_maxNumberOfVariables && variables[index] != 0) {
       if (strcmp(m_name, &variables[index]) == 0) {
-        return variablesIndex/maxSizeVariable;
+        return nextVariableIndex;
       }
       index+= maxSizeVariable;
     }
-    if ((variablesIndex/maxSizeVariable) < Expression::k_maxNumberOfVariables) {
+    if (nextVariableIndex < Expression::k_maxNumberOfVariables) {
+      assert(variables[nextVariableIndex*maxSizeVariable] == 0);
       if (strlen(m_name) + 1 > (size_t)maxSizeVariable) {
         return -2;
       }
-      strlcpy(&variables[variablesIndex], m_name, maxSizeVariable);
-      variables[variablesIndex+maxSizeVariable] = 0;
-      return variablesIndex/maxSizeVariable+1;
+      strlcpy(&variables[nextVariableIndex*maxSizeVariable], m_name, maxSizeVariable);
+      nextVariableIndex++;
+      if (nextVariableIndex < Expression::k_maxNumberOfVariables) {
+        variables[nextVariableIndex*maxSizeVariable] = 0;
+      }
+      return nextVariableIndex;
     }
     return -1;
   }
-  return variablesIndex/maxSizeVariable;
+  return nextVariableIndex;
 }
 
 float SymbolNode::characteristicXRange(Context * context, Preferences::AngleUnit angleUnit) const {
-  return isUnknown(UCodePointUnknownX) ? NAN : 0.0f;
+  return isUnknown() ? NAN : 0.0f;
 }
 
 Layout SymbolNode::createLayout(Preferences::PrintFloatMode floatDisplayMode, int numberOfSignificantDigits) const {
-  assert(!isUnknown(UCodePointUnknownX));
+  assert(!isUnknown());
   // TODO return Parse(m_name).createLayout() ?
   // Special case for the symbol names: u(n), u(n+1), v(n), v(n+1), w(n), w(n+1)
   const char * sequenceIndex[] = {"n", "n+1"};
@@ -92,19 +90,12 @@ Layout SymbolNode::createLayout(Preferences::PrintFloatMode floatDisplayMode, in
   return LayoutHelper::String(m_name, strlen(m_name));
 }
 
-int SymbolNode::serialize(char * buffer, int bufferSize, Preferences::PrintFloatMode floatDisplayMode, int numberOfSignificantDigits) const {
-  if (bufferSize == 0) {
-    return -1;
-  }
-  return minInt(bufferSize - 1, strlcpy(buffer, m_name, bufferSize));
-}
-
 Expression SymbolNode::shallowReduce(ReductionContext reductionContext) {
   return Symbol(this).shallowReduce(reductionContext);
 }
 
-Expression SymbolNode::shallowReplaceReplaceableSymbols(Context * context) {
-  return Symbol(this).shallowReplaceReplaceableSymbols(context);
+Expression SymbolNode::deepReplaceReplaceableSymbols(Context * context, bool * didReplace, bool replaceFunctionsOnly, int parameteredAncestorsCount) {
+  return Symbol(this).deepReplaceReplaceableSymbols(context, didReplace, replaceFunctionsOnly, parameteredAncestorsCount);
 }
 
 ExpressionNode::LayoutShape SymbolNode::leftLayoutShape() const {
@@ -126,8 +117,8 @@ Evaluation<T> SymbolNode::templatedApproximate(Context * context, Preferences::C
   return e.node()->approximate(T(), context, complexFormat, angleUnit);
 }
 
-bool SymbolNode::isUnknown(CodePoint unknownSymbol) const {
-  bool result = UTF8Helper::CodePointIs(m_name, unknownSymbol);
+bool SymbolNode::isUnknown() const {
+  bool result = UTF8Helper::CodePointIs(m_name, UCodePointUnknown);
   if (result) {
     assert(m_name[1] == 0);
   }
@@ -143,7 +134,7 @@ Symbol Symbol::Builder(CodePoint name) {
   return Symbol::Builder(buffer, codePointLength);
 }
 
-bool Symbol::isSeriesSymbol(const char * c) {
+bool Symbol::isSeriesSymbol(const char * c, Poincare::Context * context) {
   // [NV][1-3]
   if (c[2] == 0 && (c[0] == 'N' || c[0] == 'V') && c[1] >= '1' && c[1] <= '3') {
     return true;
@@ -151,7 +142,7 @@ bool Symbol::isSeriesSymbol(const char * c) {
   return false;
 }
 
-bool Symbol::isRegressionSymbol(const char * c) {
+bool Symbol::isRegressionSymbol(const char * c, Poincare::Context * context) {
   // [XY][1-3]
   if (c[2] == 0 && (c[0] == 'X' || c[0] == 'Y') && c[1] >= '1' && c[1] <= '3') {
     return true;
@@ -160,11 +151,17 @@ bool Symbol::isRegressionSymbol(const char * c) {
 }
 
 Expression Symbol::shallowReduce(ExpressionNode::ReductionContext reductionContext) {
-  Expression parentExpression = parent();
+  if (reductionContext.symbolicComputation() == ExpressionNode::SymbolicComputation::ReplaceDefinedFunctionsWithDefinitions
+    || reductionContext.symbolicComputation() == ExpressionNode::SymbolicComputation::DoNotReplaceAnySymbol)
+  {
+    return *this;
+  }
+  if (reductionContext.symbolicComputation() == ExpressionNode::SymbolicComputation::ReplaceAllSymbolsWithUndefined) {
+    return replaceWithUndefinedInPlace();
+  }
   {
     Expression current = *this;
-    Expression p = parentExpression;
-
+    Expression p = parent();
     while (!p.isUninitialized()) {
       if (p.isParameteredExpression()) {
         int index = p.indexOfChild(current);
@@ -172,13 +169,10 @@ Expression Symbol::shallowReduce(ExpressionNode::ReductionContext reductionConte
           // The symbol is a paremetered expression's parameter
           return *this;
         }
-        if (index == ParameteredExpression::ParameteredChildIndex()) {
-          assert(p.childAtIndex(ParameteredExpression::ParameterChildIndex()).type() == ExpressionNode::Type::Symbol);
-          Expression untypedParameter = p.childAtIndex(ParameteredExpression::ParameterChildIndex());
-          Symbol parameter = static_cast<Symbol &>(untypedParameter);
-          if (strcmp(parameter.name(), name()) == 0) {
-            return *this;
-          }
+        if (index == ParameteredExpression::ParameteredChildIndex()
+            && hasSameNameAs(static_cast<ParameteredExpression&>(p).parameter()))
+        {
+          return *this;
         }
       }
       current = p;
@@ -186,23 +180,20 @@ Expression Symbol::shallowReduce(ExpressionNode::ReductionContext reductionConte
     }
   }
 
-  Symbol s = *this;
-  Expression result = SymbolAbstract::Expand(s, reductionContext.context(), true);
+  Expression result = SymbolAbstract::Expand(*this, reductionContext.context(), true);
   if (result.isUninitialized()) {
-    if (reductionContext.symbolicComputation()) {
+    if (reductionContext.symbolicComputation() != ExpressionNode::SymbolicComputation::ReplaceAllSymbolsWithDefinitionsOrUndefined) {
       return *this;
     }
     result = Undefined::Builder();
   }
-  if (!parentExpression.isUninitialized()) {
-    parentExpression.replaceChildInPlace(*this, result);
-  }
+  replaceWithInPlace(result);
   // The stored expression is as entered by the user, so we need to call reduce
   return result.deepReduce(reductionContext);
 }
 
 Expression Symbol::replaceSymbolWithExpression(const SymbolAbstract & symbol, const Expression & expression) {
-  if (symbol.type() == ExpressionNode::Type::Symbol && strcmp(name(), symbol.name()) == 0) {
+  if (symbol.type() == ExpressionNode::Type::Symbol && hasSameNameAs(symbol)) {
     Expression value = expression.clone();
     Expression p = parent();
     if (!p.isUninitialized() && p.node()->childAtIndexNeedsUserParentheses(value, p.indexOfChild(*this))) {
@@ -214,7 +205,7 @@ Expression Symbol::replaceSymbolWithExpression(const SymbolAbstract & symbol, co
   return *this;
 }
 
-int Symbol::getPolynomialCoefficients(Context * context, const char * symbolName, Expression coefficients[]) const {
+int Symbol::getPolynomialCoefficients(Context * context, const char * symbolName, Expression coefficients[], ExpressionNode::SymbolicComputation symbolicComputation) const {
   if (strcmp(name(), symbolName) == 0) {
     coefficients[0] = Rational::Builder(0);
     coefficients[1] = Rational::Builder(1);
@@ -224,10 +215,25 @@ int Symbol::getPolynomialCoefficients(Context * context, const char * symbolName
   return 0;
 }
 
-Expression Symbol::shallowReplaceReplaceableSymbols(Context * context) {
-  if (isSystemSymbol()) {
+Expression Symbol::deepReplaceReplaceableSymbols(Context * context, bool * didReplace, bool replaceFunctionsOnly, int parameteredAncestorsCount) {
+  if (replaceFunctionsOnly || isSystemSymbol()) {
     return *this;
   }
+
+  // Check that this is not a parameter in a parametered expression
+  Expression ancestor = *this;
+  while (parameteredAncestorsCount > 0) {
+    ancestor = ancestor.parent();
+    assert(!ancestor.isUninitialized());
+    if (ancestor.isParameteredExpression()) {
+      parameteredAncestorsCount--;
+      Symbol ancestorParameter = static_cast<ParameteredExpression&>(ancestor).parameter();
+      if (hasSameNameAs(ancestorParameter)) {
+        return *this;
+      }
+    }
+  }
+
   Expression e = context->expressionForSymbolAbstract(*this, true);
   if (e.isUninitialized()) {
     return *this;
@@ -243,6 +249,7 @@ Expression Symbol::shallowReplaceReplaceableSymbols(Context * context) {
     return replaceWithUndefinedInPlace();
   }
   replaceWithInPlace(e);
+  *didReplace = true;
   return e;
 }
 

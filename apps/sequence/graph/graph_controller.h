@@ -14,7 +14,7 @@ namespace Sequence {
 
 class GraphController final : public Shared::FunctionGraphController {
 public:
-  GraphController(Responder * parentResponder, ::InputEventHandlerDelegate * inputEventHandlerDelegate, SequenceStore * sequenceStore, CurveViewRange * graphRange, Shared::CurveViewCursor * cursor, int * indexFunctionSelectedByCursor, uint32_t * modelVersion, uint32_t * rangeVersion, Poincare::Preferences::AngleUnit * angleUnitVersion, ButtonRowController * header);
+  GraphController(Responder * parentResponder, ::InputEventHandlerDelegate * inputEventHandlerDelegate, SequenceStore * sequenceStore, CurveViewRange * graphRange, Shared::CurveViewCursor * cursor, int * indexFunctionSelectedByCursor, uint32_t * modelVersion, uint32_t * previousModelsVersions, uint32_t * rangeVersion, Poincare::Preferences::AngleUnit * angleUnitVersion, ButtonRowController * header);
   I18n::Message emptyMessage() override;
   void viewWillAppear() override;
   TermSumController * termSumController() { return &m_termSumController; }
@@ -25,7 +25,7 @@ public:
 private:
   Shared::XYBannerView * bannerView() override { return &m_bannerView; }
   bool handleEnter() override;
-  bool moveCursorHorizontally(int direction) override;
+  bool moveCursorHorizontally(int direction, bool fast = false) override;
   double defaultCursorT(Ion::Storage::Record record) override;
   CurveViewRange * interactiveCurveViewRange() override { return m_graphRange; }
   SequenceStore * functionStore() const override { return static_cast<SequenceStore *>(Shared::FunctionGraphController::functionStore()); }

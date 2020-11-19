@@ -1,8 +1,5 @@
 #include <escher/run_loop.h>
 #include <assert.h>
-#ifdef __EMSCRIPTEN__
-#include <emscripten.h>
-#endif
 
 RunLoop::RunLoop() :
   m_time(0) {
@@ -56,7 +53,7 @@ bool RunLoop::step() {
   }
 
 #if ESCHER_LOG_EVENTS_BINARY
-  Ion::Console::writeChar((char)event.id());
+  Ion::Console::writeChar(static_cast<uint8_t>(event));
 #endif
 #if ESCHER_LOG_EVENTS_NAME
   const char * name = event.name();

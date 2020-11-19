@@ -5,12 +5,15 @@ ion_src += $(addprefix ion/src/simulator/ios/, \
 ion_src += $(addprefix ion/src/simulator/shared/, \
   apple/language.m \
   dummy/callback.cpp \
+  dummy/haptics_enabled.cpp \
+  haptics.cpp \
 )
+
+ion_src += ion/src/shared/collect_registers.cpp
 
 $(call object_for,ion/src/simulator/shared/main.cpp) : SFLAGS += -DEPSILON_SDL_FULLSCREEN=1
 
-GOOGLE_ANALYTICS ?= 1
-ifeq ($(GOOGLE_ANALYTICS),1)
+ifeq ($(EPSILON_TELEMETRY),1)
 # Display a nice error if the Google Analytics SDK is not installed
 $(call object_for,ion/src/simulator/ios/telemetry.m): ion/src/simulator/ios/GoogleAnalyticsServices/GoogleAnalytics/Library/GAI.h
 ion/src/simulator/ios/GoogleAnalyticsServices/GoogleAnalytics/Library/GAI.h:
@@ -25,9 +28,9 @@ LDFLAGS += -lz
 LDFLAGS += -framework SystemConfiguration
 LDFLAGS += -framework CoreData
 LDFLAGS += -Lion/src/simulator/ios/GoogleAnalyticsServices
-else
-ion_src += ion/src/simulator/shared/dummy/telemetry.cpp
 endif
+
+ifndef ARCH
 
 # App resources
 
@@ -36,7 +39,7 @@ SIMULATOR_ICON_SIZES = 20x20 29x29 40x40 40x40 40x40 58x58 58x58 60x60 76x76 \
 SIMULATOR_ASSETS_PATH = $(BUILD_DIR)/app/assets/Assets.xcassets
 SIMULATOR_ICONSET = $(SIMULATOR_ASSETS_PATH)/AppIcon.appiconset
 
-include ion/src/simulator/shared/apple/Makefile
+include ion/src/simulator/shared/apple/helpers.mak
 
 $(call simulator_app_plist,Info.plist): ion/src/simulator/ios/Info.plist $(call simulator_app_resource,Assets.car)
 	$(call rule_label,PLUTIL)
@@ -66,11 +69,12 @@ $(call simulator_app_resource,embedded.mobileprovision): $(IOS_PROVISIONNING_PRO
 	$(call rule_label,COPY)
 	$(Q) cp $^ $@
 
-$(BUILD_DIR)/app/entitlements.plist: $(call simulator_app_resource,embedded.mobileprovision)
+$(BUILD_DIR)/app/entitlements.plist: $(IOS_PROVISIONNING_PROFILE)
 	$(call rule_label,SCMS)
 	$(Q) security cms -D -i $(IOS_PROVISIONNING_PROFILE) | plutil -extract Entitlements xml1 - -o $@
 
-SIMULATOR_APP_DEPS += $(BUILD_DIR)/app/entitlements.plist
+simulator_app_deps += $(BUILD_DIR)/app/entitlements.plist
+simulator_app_deps += $(call simulator_app_resource,embedded.mobileprovision)
 else
 $(call simulator_app_resource,embedded.mobileprovision):
 	$(warning Building without a provisionning profile. Please define IOS_PROVISIONNING_PROFILE to point to the .mobileprovision file you want to use.)
@@ -82,27 +86,11 @@ $(SIMULATOR_ICONSET)/Contents.json: ion/src/simulator/ios/icon_assets.json $(SIM
 
 $(call simulator_app_resource,Assets.car): $(SIMULATOR_ICONSET)/Contents.json | $$(@D)/.
 	$(call rule_label,ACTOOL)
-	$(Q) $(ACTOOL) --compile $(BUILD_DIR)/app/Payload/Epsilon.app --minimum-deployment-target $(APPLE_PLATFORM_MIN_VERSION) --platform $(APPLE_SDK) --app-icon AppIcon --output-partial-info-plist $(BUILD_DIR)/app/assets/partial.plist $(SIMULATOR_ASSETS_PATH) > /dev/null
+	$(Q) $(ACTOOL) --compile $(BUILD_DIR)/$*.app --minimum-deployment-target $(APPLE_PLATFORM_MIN_VERSION) --platform $(APPLE_SDK) --app-icon AppIcon --output-partial-info-plist $(BUILD_DIR)/app/assets/partial.plist $(SIMULATOR_ASSETS_PATH) > /dev/null
 
-SIMULATOR_APP_DEPS += $(call simulator_app_resource,\
-  Assets.car \
-  launch.storyboardc \
-)
+simulator_app_deps += $(call simulator_app_resource,Assets.car)
+simulator_app_deps += $(call simulator_app_resource,launch.storyboardc)
 
-$(BUILD_DIR)/app/epsilon.ipa: $(SIMULATOR_APP_DEPS)
-ifdef IOS_PROVISIONNING_PROFILE
-	$(call rule_label,SIGN)
-	$(Q) codesign --force --entitlements $(BUILD_DIR)/app/entitlements.plist --sign "iPhone Distribution: NumWorks" $(BUILD_DIR)/app/Payload/Epsilon.app
-endif
-	$(call rule_label,ZIP)
-	$(Q) cd $(dir $@) ; zip -qr9 $(notdir $@) Payload
+include ion/src/simulator/shared/apple/targets.mak
 
-ifndef ARCH
-DEFAULT := $(BUILD_DIR)/app/epsilon.ipa
-endif
-
-ifeq ($(APPLE_PLATFORM),ios-simulator)
-.PHONY: epsilon_run
-epsilon_run: $(SIMULATOR_APP_DEPS)
-	xcrun simctl install booted $(BUILD_DIR)/app/Payload/Epsilon.app
 endif

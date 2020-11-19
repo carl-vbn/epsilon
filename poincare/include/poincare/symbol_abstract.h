@@ -24,13 +24,12 @@ namespace Poincare {
  * */
 
 class SymbolAbstractNode : public ExpressionNode {
-  friend class Store;
 public:
   virtual const char * name() const = 0;
   size_t size() const override;
 
   // ExpressionNode
-  int simplificationOrderSameType(const ExpressionNode * e, bool ascending, bool canBeInterrupted) const override;
+  int simplificationOrderSameType(const ExpressionNode * e, bool ascending, bool canBeInterrupted, bool ignoreParentheses) const override;
 
   // Property
   Sign sign(Context * context) const override;
@@ -38,7 +37,7 @@ public:
 
   // TreeNode
 #if POINCARE_TREE_LOG
-  virtual void logNodeName(std::ostream & stream) const override {
+  void logNodeName(std::ostream & stream) const override {
     stream << "SymbolAbstract";
   }
   virtual void logAttributes(std::ostream & stream) const override {
@@ -46,8 +45,11 @@ public:
   }
 #endif
 
-protected:
+private:
   virtual size_t nodeSize() const = 0;
+
+  // Layout
+  int serialize(char * buffer, int bufferSize, Preferences::PrintFloatMode floatDisplayMode, int numberOfSignificantDigits) const override;
 };
 
 /* WARNING: symbol abstract cannot have any virtual methods. Otherwise,
@@ -64,6 +66,7 @@ class SymbolAbstract : public Expression {
   friend class SymbolAbstractNode;
 public:
   const char * name() const { return node()->name(); }
+  bool hasSameNameAs(const SymbolAbstract & other) const;
   static size_t TruncateExtension(char * dst, const char * src, size_t len);
   static bool matches(const SymbolAbstract & symbol, ExpressionTest test, Context * context);
   constexpr static size_t k_maxNameSize = 8;
@@ -73,7 +76,7 @@ protected:
   static T Builder(const char * name, int length);
   SymbolAbstractNode * node() const { return static_cast<SymbolAbstractNode *>(Expression::node()); }
 private:
-  static Expression Expand(const SymbolAbstract & symbol, Context * context, bool clone);
+  static Expression Expand(const SymbolAbstract & symbol, Context * context, bool clone, ExpressionNode::SymbolicComputation symbolicComputation = ExpressionNode::SymbolicComputation::ReplaceAllDefinedSymbolsWithDefinition);
 };
 
 }

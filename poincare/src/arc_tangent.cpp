@@ -22,7 +22,7 @@ int ArcTangentNode::serialize(char * buffer, int bufferSize, Preferences::PrintF
 template<typename T>
 Complex<T> ArcTangentNode::computeOnComplex(const std::complex<T> c, Preferences::ComplexFormat, Preferences::AngleUnit angleUnit) {
   std::complex<T> result;
-  if (c.imag() == 0 && std::fabs(c.real()) <= 1.0) {
+  if (c.imag() == 0 && std::fabs(c.real()) <= (T)1.0) {
     /* atan: R -> R
      * In these cases we rather use std::atan(double) because atan on complexes
      * is not as precise as atan on double in std library. For instance,
@@ -40,7 +40,7 @@ Complex<T> ArcTangentNode::computeOnComplex(const std::complex<T> c, Preferences
       result.real(-result.real()); // other side of the cut
     }
   }
-  result = Trigonometry::RoundToMeaningfulDigits(result, c);
+  result = ApproximationHelper::NeglectRealOrImaginaryPartIfNeglectable(result, c);
   return Complex<T>::Builder(Trigonometry::ConvertRadianToAngleUnit(result, angleUnit));
 }
 
@@ -51,6 +51,7 @@ Expression ArcTangentNode::shallowReduce(ReductionContext reductionContext) {
 Expression ArcTangent::shallowReduce(ExpressionNode::ReductionContext reductionContext) {
   {
     Expression e = Expression::defaultShallowReduce();
+    e = e.defaultHandleUnitsInChildren();
     if (e.isUndefined()) {
       return e;
     }

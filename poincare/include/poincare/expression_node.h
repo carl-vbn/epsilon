@@ -28,6 +28,7 @@ public:
     Undefined = 1,
     Unreal,
     Rational,
+    BasedInteger,
     Decimal,
     Float,
     Infinity,
@@ -39,6 +40,7 @@ public:
     Constant,
     Symbol,
     Store,
+    UnitConvert,
     Equal,
     Sine,
     Cosine,
@@ -93,6 +95,7 @@ public:
     Subtraction,
     Sum,
 
+    Unit,
     ComplexCartesian,
 
     ConfidenceInterval,
@@ -121,6 +124,18 @@ public:
      * - identifying tangent in cos/sin polynoms ... */
     User
   };
+  enum class SymbolicComputation {
+    ReplaceAllSymbolsWithDefinitionsOrUndefined = 0,
+    ReplaceAllDefinedSymbolsWithDefinition = 1,
+    ReplaceDefinedFunctionsWithDefinitions = 2,
+    ReplaceAllSymbolsWithUndefined = 3, // Used in UnitConvert::shallowReduce
+    DoNotReplaceAnySymbol = 4
+  };
+  enum class UnitConversion {
+    None = 0,
+    Default,
+    InternationalSystem
+  };
   enum class Sign {
     Negative = -1,
     Unknown = 0,
@@ -129,24 +144,27 @@ public:
 
   class ReductionContext {
   public:
-    ReductionContext(Context * context, Preferences::ComplexFormat complexFormat, Preferences::AngleUnit angleUnit, ReductionTarget target, bool symbolicComputation = true) :
+    ReductionContext(Context * context, Preferences::ComplexFormat complexFormat, Preferences::AngleUnit angleUnit, ReductionTarget target, SymbolicComputation symbolicComputation = SymbolicComputation::ReplaceAllDefinedSymbolsWithDefinition, UnitConversion unitConversion = UnitConversion::Default) :
       m_context(context),
       m_complexFormat(complexFormat),
       m_angleUnit(angleUnit),
       m_target(target),
-      m_symbolicComputation(symbolicComputation)
+      m_symbolicComputation(symbolicComputation),
+      m_unitConversion(unitConversion)
     {}
     Context * context() { return m_context; }
     Preferences::ComplexFormat complexFormat() const { return m_complexFormat; }
     Preferences::AngleUnit angleUnit() const { return m_angleUnit; }
     ReductionTarget target() const { return m_target; }
-    bool symbolicComputation() const { return m_symbolicComputation; }
+    SymbolicComputation symbolicComputation() const { return m_symbolicComputation; }
+    UnitConversion unitConversion() const { return m_unitConversion; }
   private:
     Context * m_context;
     Preferences::ComplexFormat m_complexFormat;
     Preferences::AngleUnit m_angleUnit;
     ReductionTarget m_target;
-    bool m_symbolicComputation;
+    SymbolicComputation m_symbolicComputation;
+    UnitConversion m_unitConversion;
   };
 
   virtual Sign sign(Context * context) const { return Sign::Unknown; }
@@ -161,12 +179,14 @@ public:
   /*!*/ virtual Expression replaceSymbolWithExpression(const SymbolAbstract & symbol, const Expression & expression);
   /*!*/ virtual Expression setSign(Sign s, ReductionContext reductionContext);
   virtual int polynomialDegree(Context * context, const char * symbolName) const;
-  /*!*/ virtual int getPolynomialCoefficients(Context * context, const char * symbolName, Expression coefficients[]) const;
-  /*!*/ virtual Expression shallowReplaceReplaceableSymbols(Context * context);
-  typedef bool (*isVariableTest)(const char * c);
-  virtual int getVariables(Context * context, isVariableTest isVariable, char * variables, int maxSizeVariable) const;
+  /*!*/ virtual int getPolynomialCoefficients(Context * context, const char * symbolName, Expression coefficients[], ExpressionNode::SymbolicComputation symbolicComputation) const;
+  /*!*/ virtual Expression deepReplaceReplaceableSymbols(Context * context, bool * didReplace, bool replaceFunctionsOnly, int parameteredAncestorsCount);
+  typedef bool (*isVariableTest)(const char * c, Poincare::Context * context);
+  virtual int getVariables(Context * context, isVariableTest isVariable, char * variables, int maxSizeVariable, int nextVariableIndex) const;
   virtual float characteristicXRange(Context * context, Preferences::AngleUnit angleUnit) const;
   bool isOfType(Type * types, int length) const;
+
+  virtual Expression removeUnit(Expression * unit); // Only reduced nodes should answer
 
   /* Simplification */
   /* SimplificationOrder returns:
@@ -179,15 +199,15 @@ public:
    * together (ie Pi, 2*Pi).
    * Because SimplificationOrder is a recursive call, we sometimes enable its
    * interruption to avoid freezing in the simplification process. */
-  static int SimplificationOrder(const ExpressionNode * e1, const ExpressionNode * e2, bool ascending, bool canBeInterrupted = false);
+  static int SimplificationOrder(const ExpressionNode * e1, const ExpressionNode * e2, bool ascending, bool canBeInterrupted = false, bool ignoreParentheses = false);
   /* In the simplification order, most expressions are compared by only
    * comparing their types. However hierarchical expressions of same type would
    * compare their operands and thus need to reimplement
    * simplificationOrderSameType. Besides, operations that can be simplified
    * (ie +, *, ^, !) have specific rules to group like terms together and thus
    * reimplement simplificationOrderGreaterType. */
-  virtual int simplificationOrderGreaterType(const ExpressionNode * e, bool ascending, bool canBeInterrupted) const { return ascending ? -1 : 1; }
-  virtual int simplificationOrderSameType(const ExpressionNode * e, bool ascending, bool canBeInterrupted) const;
+  virtual int simplificationOrderGreaterType(const ExpressionNode * e, bool ascending, bool canBeInterrupted, bool ignoreParentheses) const { return ascending ? -1 : 1; }
+  virtual int simplificationOrderSameType(const ExpressionNode * e, bool ascending, bool canBeInterrupted, bool ignoreParentheses) const;
 
   /* Layout Helper */
   virtual Layout createLayout(Preferences::PrintFloatMode floatDisplayMode, int numberOfSignificantDigits) const = 0;
@@ -209,6 +229,7 @@ public:
   enum class LayoutShape {
     Decimal,
     Integer,
+    BinaryHexadecimal,
     OneLetter,
     MoreLetters,
     BoundaryPunctuation, // ( [ ∫

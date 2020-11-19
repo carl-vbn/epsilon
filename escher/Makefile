@@ -4,6 +4,7 @@ escher_src += $(addprefix escher/src/,\
   alternate_empty_view_controller.cpp \
   app.cpp \
   bank_view_controller.cpp \
+  bordered.cpp \
   buffer_text_view.cpp \
   button.cpp \
   button_row_controller.cpp \
@@ -44,8 +45,9 @@ escher_src += $(addprefix escher/src/,\
   message_table_cell_with_message.cpp \
   message_table_cell_with_switch.cpp \
   message_text_view.cpp \
-  message_tree.cpp \
+  metric.cpp \
   modal_view_controller.cpp \
+  modal_view_empty_controller.cpp \
   nested_menu_controller.cpp \
   palette.cpp \
   pointer_text_view.cpp \
@@ -54,13 +56,12 @@ escher_src += $(addprefix escher/src/,\
   scroll_view.cpp \
   scroll_view_data_source.cpp \
   scroll_view_indicator.cpp \
+  scrollable_expression_view.cpp \
   scrollable_view.cpp \
   selectable_table_view.cpp \
-  selectable_table_view_delegate.cpp \
   simple_list_view_data_source.cpp \
   simple_table_view_data_source.cpp \
   solid_color_view.cpp \
-  solid_text_area.cpp \
   stack_view.cpp \
   stack_view_controller.cpp \
   switch_view.cpp \
@@ -87,12 +88,16 @@ escher_src += $(addprefix escher/src/,\
   window.cpp \
 )
 
+tests_src += $(addprefix escher/test/,\
+  layout_field.cpp\
+)
 
 $(eval $(call rule_for, \
   HOSTCC, \
   escher/image/inliner, \
   escher/image/inliner.c $(addprefix ion/src/external/lz4/, lz4.c lz4hc.c), \
-  $$(HOSTCC) -std=c99 `libpng-config --cflags` $$^ `libpng-config --ldflags` -o $$@ \
+  $$(HOSTCC) -std=c99 `libpng-config --cflags` $$^ `libpng-config --ldflags` -o $$@, \
+  global \
 ))
 
 INLINER := $(BUILD_DIR)/escher/image/inliner
@@ -102,7 +107,8 @@ $(eval $(call rule_for, \
   INLINER, \
   %.h %.cpp, \
   %.png $$(INLINER), \
-  $$(INLINER) $$< $$(basename $$@).h $$(basename $$@).cpp \
+  $$(INLINER) $$< $$(basename $$@).h $$(basename $$@).cpp, \
+  global \
 ))
 
 # Mark a .cpp file as depending on a .png one

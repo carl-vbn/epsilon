@@ -61,7 +61,7 @@ void App::Snapshot::setOpt(const char * name, const char * value) {
     const char * scriptContent = separator;
     Code::ScriptTemplate script(scriptName, scriptContent);
     m_scriptStore.addScriptFromTemplate(&script);
-    m_scriptStore.scriptNamed(scriptName).toggleImportationStatus(); // set Importation Status to 1
+    ScriptStore::ScriptNamed(scriptName).toggleAutoimportationStatus(); // set Importation Status to 1
     return;
   }
   if (strcmp(name, "lock-on-console") == 0) {
@@ -103,6 +103,10 @@ bool App::handleEvent(Ion::Events::Event event) {
     return true;
   }
   return false;
+}
+
+void App::willExitResponderChain(Responder * nextFirstResponder) {
+  m_menuController.willExitApp();
 }
 
 Toolbox * App::toolboxForInputEventHandler(InputEventHandler * textInput) {

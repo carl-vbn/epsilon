@@ -9,7 +9,7 @@ static constexpr TrigonometryCheatTable::Type s_targetType[] = {
 };
 
 Expression TrigonometryCheatTable::Row::Pair::reducedExpression(bool assertNotUninitialized, ExpressionNode::ReductionContext reductionContext) const {
-  Expression e = Expression::Parse(m_expression);
+  Expression e = Expression::Parse(m_expression, nullptr); // No context needed
   if (assertNotUninitialized) {
     assert(!e.isUninitialized());
   } else {
@@ -82,7 +82,7 @@ Expression TrigonometryCheatTable::simplify(const Expression e, ExpressionNode::
  * For instance, when simplfy a Cosine, we always compute the value for an angle
  * in the top right trigonometric quadrant. */
 const TrigonometryCheatTable * TrigonometryCheatTable::Table() {
-  static Row sTableRows[] = {
+  static const Row sTableRows[] = {
     Row(Row::Pair("-90", -90.0f),
         Row::Pair("π*(-2)^(-1)", -1.5707963267948966f),
         Row::Pair("-100", -100.0f),
@@ -306,7 +306,7 @@ const TrigonometryCheatTable * TrigonometryCheatTable::Table() {
         Row::Pair("0",0.0f),
         Row::Pair("0",0.0f))
   };
-  static TrigonometryCheatTable sTable(sTableRows);
+  static const TrigonometryCheatTable sTable(sTableRows);
   return &sTable;
 }
 

@@ -3,17 +3,18 @@
 #include "script.h"
 #include "variable_box_controller.h"
 #include <apps/i18n.h>
+#include <algorithm>
 #include <assert.h>
 #include <escher/metric.h>
-#include "../apps_container.h"
+#include <apps/global_preferences.h>
+#include <apps/apps_container.h>
+#include <python/port/helpers.h>
 
 extern "C" {
 #include <stdlib.h>
 }
 
 namespace Code {
-
-static inline int minInt(int x, int y) { return x < y ? x : y; }
 
 static const char * sStandardPromptText = ">>> ";
 
@@ -27,12 +28,11 @@ ConsoleController::ConsoleController(Responder * parentResponder, App * pythonDe
   TextFieldDelegate(),
   MicroPython::ExecutionEnvironment(),
   m_pythonDelegate(pythonDelegate),
-  m_rowHeight(k_font->glyphSize().height()),
   m_importScriptsWhenViewAppears(false),
   m_selectableTableView(this, this, this, this),
-  m_editCell(this, pythonDelegate, this),
+  m_editCell(this, this, this),
   m_scriptStore(scriptStore),
-  m_sandboxController(this, this),
+  m_sandboxController(this),
   m_inputRunLoopActive(false)
 #if EPSILON_GETOPT
   , m_locked(lockOnConsole)
@@ -47,17 +47,13 @@ ConsoleController::ConsoleController(Responder * parentResponder, App * pythonDe
 }
 
 bool ConsoleController::loadPythonEnvironment() {
-  if (m_pythonDelegate->isPythonUser(this)) {
-    return true;
+  if (!m_pythonDelegate->isPythonUser(this)) {
+    m_scriptStore->clearConsoleFetchInformation();
+    emptyOutputAccumulationBuffer();
+    m_pythonDelegate->initPythonWithUser(this);
+    MicroPython::registerScriptProvider(m_scriptStore);
+    m_importScriptsWhenViewAppears = m_autoImportScripts;
   }
-  emptyOutputAccumulationBuffer();
-  m_pythonDelegate->initPythonWithUser(this);
-  MicroPython::registerScriptProvider(m_scriptStore);
-  m_importScriptsWhenViewAppears = m_autoImportScripts;
-  /* We load functions and variables names in the variable box before running
-   * any other python code to avoid failling to load functions and variables
-   * due to memory exhaustion. */
-  App::app()->variableBoxController()->loadFunctionsAndVariables();
   return true;
 }
 
@@ -75,10 +71,19 @@ void ConsoleController::autoImport() {
 }
 
 void ConsoleController::runAndPrintForCommand(const char * command) {
-  m_consoleStore.pushCommand(command, strlen(command));
+  const char * storedCommand = m_consoleStore.pushCommand(command);
   assert(m_outputAccumulationBuffer[0] == '\0');
 
-  runCode(command);
+  // Draw the console before running the code
+  m_editCell.setText("");
+  m_editCell.setPrompt("");
+  refreshPrintOutput();
+
+  runCode(storedCommand);
+
+  m_editCell.setPrompt(sStandardPromptText);
+  m_editCell.setEditing(true);
+
   flushOutputAccumulationBufferToStore();
   m_consoleStore.deleteLastLineIfEmpty();
 }
@@ -94,9 +99,7 @@ const char * ConsoleController::inputText(const char * prompt) {
   m_inputRunLoopActive = true;
 
   // Hide the sandbox if it is displayed
-  if (sandboxIsDisplayed()) {
-    hideSandbox();
-  }
+  hideAnyDisplayedViewController();
 
   const char * promptText = prompt;
   char * s = const_cast<char *>(prompt);
@@ -118,12 +121,32 @@ const char * ConsoleController::inputText(const char * prompt) {
     }
   }
 
+  const char * previousPrompt = m_editCell.promptText();
   m_editCell.setPrompt(promptText);
-  m_editCell.setText("");
+
+  /* The user will input some text that is stored in the edit cell. When the
+   * input is finished, we want to clear that cell and return the input text.
+   * We choose to shift the input in the edit cell and put a null char in first
+   * position, so that the cell seems cleared but we can still use it to store
+   * the input.
+   * To do so, we need to reduce the cell buffer size by one, so that the input
+   * can be shifted afterwards, even if it has maxSize.
+   *
+   * Illustration of a input sequence:
+   * | | | | | | | | |  <- the edit cell buffer
+   * |0| | | | | | |X|  <- clear and reduce the size
+   * |a|0| | | | | |X|  <- user input
+   * |a|b|0| | | | |X|  <- user input
+   * |a|b|c|0| | | |X|  <- user input
+   * |a|b|c|d|0| | |X|  <- last user input
+   * | |a|b|c|d|0| | |  <- increase the buffer size and shift the user input by one
+   * |0|a|b|c|d|0| | |  <- put a zero in first position: the edit cell seems empty
+   */
+
+   m_editCell.clearAndReduceSize();
 
   // Reload the history
-  m_selectableTableView.reloadData();
-  m_selectableTableView.selectCellAtLocation(0, m_consoleStore.numberOfLines());
+  reloadData(true);
   appsContainer->redrawWindow();
 
   // Launch a new input loop
@@ -132,33 +155,45 @@ const char * ConsoleController::inputText(const char * prompt) {
       return c->inputRunLoopActive();
   }, this);
 
-  // Handle the input text
+  // Print the prompt and the input text
   if (promptText != nullptr) {
     printText(promptText, s - promptText);
   }
   const char * text = m_editCell.text();
-  printText(text, strlen(text));
+  size_t textSize = strlen(text);
+  printText(text, textSize);
   flushOutputAccumulationBufferToStore();
 
-  m_editCell.setPrompt(sStandardPromptText);
+  // Clear the edit cell and return the input
+  text = m_editCell.shiftCurrentTextAndClear();
+  m_editCell.setPrompt(previousPrompt);
+  refreshPrintOutput();
 
   return text;
 }
 
 void ConsoleController::viewWillAppear() {
+  ViewController::viewWillAppear();
   loadPythonEnvironment();
   if (m_importScriptsWhenViewAppears) {
     m_importScriptsWhenViewAppears = false;
     autoImport();
   }
-  m_selectableTableView.reloadData();
-  m_selectableTableView.selectCellAtLocation(0, m_consoleStore.numberOfLines());
-  m_editCell.setEditing(true);
-  m_editCell.setText("");
+
+  reloadData(true);
 }
 
 void ConsoleController::didBecomeFirstResponder() {
-  Container::activeApp()->setFirstResponder(&m_editCell);
+  if (!isDisplayingViewController()) {
+    Container::activeApp()->setFirstResponder(&m_editCell);
+  } else {
+    /* A view controller might be displayed: for example, when pushing the
+     * console on the stack controller, we auto-import scripts during the
+     * 'viewWillAppear' and then we set the console as first responder. The
+     * sandbox or the matplotlib controller might have been pushed in the
+     * auto-import. */
+    Container::activeApp()->setFirstResponder(stackViewController()->topViewController());
+  }
 }
 
 bool ConsoleController::handleEvent(Ion::Events::Event event) {
@@ -201,7 +236,7 @@ int ConsoleController::numberOfRows() const {
 }
 
 KDCoordinate ConsoleController::rowHeight(int j) {
-  return m_rowHeight;
+  return GlobalPreferences::sharedGlobalPreferences()->font()->glyphSize().height();
 }
 
 KDCoordinate ConsoleController::cumulatedHeightFromIndex(int j) {
@@ -250,7 +285,7 @@ void ConsoleController::willDisplayCellAtLocation(HighlightCell * cell, int i, i
   }
 }
 
-void ConsoleController::tableViewDidChangeSelection(SelectableTableView * t, int previousSelectedCellX, int previousSelectedCellY, bool withinTemporarySelection) {
+void ConsoleController::tableViewDidChangeSelectionAndDidScroll(SelectableTableView * t, int previousSelectedCellX, int previousSelectedCellY, bool withinTemporarySelection) {
   if (withinTemporarySelection) {
     return;
   }
@@ -305,12 +340,10 @@ bool ConsoleController::textFieldDidFinishEditing(TextField * textField, const c
     m_inputRunLoopActive = false;
     return false;
   }
+  telemetryReportEvent("Console", text);
   runAndPrintForCommand(text);
-  if (!sandboxIsDisplayed()) {
-    m_selectableTableView.reloadData();
-    m_editCell.setEditing(true);
-    textField->setText("");
-    m_selectableTableView.selectCellAtLocation(0, m_consoleStore.numberOfLines());
+  if (!isDisplayingViewController()) {
+    reloadData(true);
   }
   return true;
 }
@@ -337,25 +370,61 @@ bool ConsoleController::textFieldDidAbortEditing(TextField * textField) {
   return true;
 }
 
-void ConsoleController::displaySandbox() {
-  if (sandboxIsDisplayed()) {
-    return;
-  }
-  stackViewController()->push(&m_sandboxController);
-}
-
-void ConsoleController::hideSandbox() {
-  if (!sandboxIsDisplayed()) {
-    return;
-  }
-  m_sandboxController.hide();
+VariableBoxController * ConsoleController::variableBoxForInputEventHandler(InputEventHandler * textInput) {
+  VariableBoxController * varBox = App::app()->variableBoxController();
+  varBox->loadVariablesImportedFromScripts();
+  varBox->setTitle(I18n::Message::FunctionsAndVariables);
+  varBox->setDisplaySubtitles(false);
+  return varBox;
 }
 
 void ConsoleController::resetSandbox() {
-  if (!sandboxIsDisplayed()) {
+  if (stackViewController()->topViewController() != sandbox()) {
     return;
   }
   m_sandboxController.reset();
+}
+
+void ConsoleController::displayViewController(ViewController * controller) {
+  if (stackViewController()->topViewController() == controller) {
+    return;
+  }
+  hideAnyDisplayedViewController();
+  stackViewController()->push(controller);
+}
+
+void ConsoleController::hideAnyDisplayedViewController() {
+  if (!isDisplayingViewController()) {
+    return;
+  }
+  stackViewController()->pop();
+}
+
+bool ConsoleController::isDisplayingViewController() {
+  /* The StackViewController model state is the best way to know wether the
+   * console is displaying a View Controller (Sandbox or Matplotlib). Indeed,
+   * keeping a boolean or a pointer raises the issue of when updating it - when
+   * 'viewWillAppear' or when 'didEnterResponderChain' - in both cases, the
+   * state would be wrong at some point... */
+  return stackViewController()->depth() > 2;
+}
+
+void ConsoleController::refreshPrintOutput() {
+  if (!isDisplayingViewController()) {
+    reloadData(false);
+    AppsContainer::sharedAppsContainer()->redrawWindow();
+  }
+}
+
+void ConsoleController::reloadData(bool isEditing) {
+  m_selectableTableView.reloadData();
+  m_selectableTableView.selectCellAtLocation(0, m_consoleStore.numberOfLines());
+  if (isEditing) {
+    m_editCell.setEditing(true);
+    m_editCell.setText("");
+  } else {
+    m_editCell.setEditing(false);
+  }
 }
 
 /* printText is called by the Python machine.
@@ -366,30 +435,30 @@ void ConsoleController::printText(const char * text, size_t length) {
     /* If there is no new line in text, just append it to the output
      * accumulation buffer. */
     appendTextToOutputAccumulationBuffer(text, length);
-    return;
+  } else {
+    if (textCutIndex < length - 1) {
+      /* If there is a new line in the middle of the text, we have to store at
+       * least two new console lines in the console store. */
+      printText(text, textCutIndex + 1);
+      printText(&text[textCutIndex+1], length - (textCutIndex + 1));
+      return;
+    }
+    /* There is a new line at the end of the text, we have to store the line in
+     * the console store. */
+    assert(textCutIndex == length - 1);
+    appendTextToOutputAccumulationBuffer(text, length-1);
+    flushOutputAccumulationBufferToStore();
+    micropython_port_vm_hook_refresh_print();
   }
-  if (textCutIndex < length - 1) {
-    /* If there is a new line in the middle of the text, we have to store at
-     * least two new console lines in the console store. */
-    printText(text, textCutIndex + 1);
-    printText(&text[textCutIndex+1], length - (textCutIndex + 1));
-    return;
-  }
-  /* There is a new line at the end of the text, we have to store the line in
-   * the console store. */
-  assert(textCutIndex == length - 1);
-  appendTextToOutputAccumulationBuffer(text, length-1);
-  flushOutputAccumulationBufferToStore();
 }
 
 void ConsoleController::autoImportScript(Script script, bool force) {
-  if (sandboxIsDisplayed()) {
-    /* The sandbox might be displayed, for instance if we are auto-importing
-     * several scripts that draw at importation. In this case, we want to remove
-     * the sandbox. */
-    hideSandbox();
-  }
-  if (script.importationStatus() || force) {
+  /* The sandbox might be displayed, for instance if we are auto-importing
+   * several scripts that draw at importation. In this case, we want to remove
+   * the sandbox. */
+  hideAnyDisplayedViewController();
+
+  if (script.autoImportationStatus() || force) {
     // Step 1 - Create the command "from scriptName import *".
 
     assert(strlen(k_importCommand1) + strlen(script.fullName()) - strlen(ScriptStore::k_scriptExtension) - 1 + strlen(k_importCommand2) + 1 <= k_maxImportCommandSize);
@@ -401,7 +470,7 @@ void ConsoleController::autoImportScript(Script script, bool force) {
 
     /* Copy the script name without the extension ".py". The '.' is overwritten
      * by the null terminating char. */
-    int copySizeWithNullTerminatingZero = minInt(k_maxImportCommandSize - currentChar, strlen(scriptName) - strlen(ScriptStore::k_scriptExtension));
+    int copySizeWithNullTerminatingZero = std::min(k_maxImportCommandSize - currentChar, strlen(scriptName) - strlen(ScriptStore::k_scriptExtension));
     assert(copySizeWithNullTerminatingZero >= 0);
     assert(copySizeWithNullTerminatingZero <= k_maxImportCommandSize - currentChar);
     strlcpy(command+currentChar, scriptName, copySizeWithNullTerminatingZero);
@@ -414,16 +483,13 @@ void ConsoleController::autoImportScript(Script script, bool force) {
     // Step 2 - Run the command
     runAndPrintForCommand(command);
   }
-  if (!sandboxIsDisplayed() && force) {
-    m_selectableTableView.reloadData();
-    m_selectableTableView.selectCellAtLocation(0, m_consoleStore.numberOfLines());
-    m_editCell.setEditing(true);
-    m_editCell.setText("");
+  if (!isDisplayingViewController() && force) {
+    reloadData(true);
   }
 }
 
 void ConsoleController::flushOutputAccumulationBufferToStore() {
-  m_consoleStore.pushResult(m_outputAccumulationBuffer, strlen(m_outputAccumulationBuffer));
+  m_consoleStore.pushResult(m_outputAccumulationBuffer);
   emptyOutputAccumulationBuffer();
 }
 

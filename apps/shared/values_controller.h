@@ -20,15 +20,16 @@ public:
   const char * title() override;
   void viewWillAppear() override;
   void viewDidDisappear() override;
+  TELEMETRY_ID("Values");
 
   // Responder
-  virtual bool handleEvent(Ion::Events::Event event) override;
+  bool handleEvent(Ion::Events::Event event) override;
   void didBecomeFirstResponder() override;
   void willExitResponderChain(Responder * nextFirstResponder) override;
 
   // TableViewDataSource
   int numberOfColumns() const override;
-  virtual void willDisplayCellAtLocation(HighlightCell * cell, int i, int j) override;
+  void willDisplayCellAtLocation(HighlightCell * cell, int i, int j) override;
   HighlightCell * reusableCell(int index, int type) override;
   int reusableCellCount(int type) override;
   int typeAtLocation(int i, int j) override;

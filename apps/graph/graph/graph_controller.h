@@ -15,7 +15,7 @@ namespace Graph {
 
 class GraphController : public Shared::FunctionGraphController, public GraphControllerHelper {
 public:
-  GraphController(Responder * parentResponder, ::InputEventHandlerDelegate * inputEventHandlerDelegate, Shared::InteractiveCurveViewRange * curveViewRange, Shared::CurveViewCursor * cursor, int * indexFunctionSelectedByCursor, uint32_t * modelVersion, uint32_t * rangeVersion, Poincare::Preferences::AngleUnit * angleUnitVersion, ButtonRowController * header);
+  GraphController(Responder * parentResponder, ::InputEventHandlerDelegate * inputEventHandlerDelegate, Shared::InteractiveCurveViewRange * curveViewRange, Shared::CurveViewCursor * cursor, int * indexFunctionSelectedByCursor, uint32_t * modelVersion, uint32_t * previousModelsVersions, uint32_t * rangeVersion, Poincare::Preferences::AngleUnit * angleUnitVersion, ButtonRowController * header);
   I18n::Message emptyMessage() override;
   void viewWillAppear() override;
   bool displayDerivativeInBanner() const { return m_displayDerivativeInBanner; }
@@ -27,7 +27,7 @@ private:
   void selectFunctionWithCursor(int functionIndex) override;
   BannerView * bannerView() override { return &m_bannerView; }
   void reloadBannerView() override;
-  bool moveCursorHorizontally(int direction) override;
+  bool moveCursorHorizontally(int direction, bool fast = false) override;
   int nextCurveIndexVertically(bool goingUp, int currentSelectedCurve, Poincare::Context * context) const override;
   double defaultCursorT(Ion::Storage::Record record) override;
   Shared::InteractiveCurveViewRange * interactiveCurveViewRange() override { return m_graphRange; }

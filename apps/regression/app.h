@@ -30,6 +30,7 @@ public:
     int * graphSelectedDotIndex() { return &m_graphSelectedDotIndex; }
     int * selectedSeriesIndex() { return &m_selectedSeriesIndex; }
     uint32_t * modelVersion() { return &m_modelVersion; }
+    uint32_t * previousModelsVersions() { return m_store.seriesChecksum(); }
     uint32_t * rangeVersion() { return &m_rangeVersion; }
   private:
     void tidy() override;
@@ -43,9 +44,10 @@ public:
   static App * app() {
     return static_cast<App *>(Container::activeApp());
   }
+  TELEMETRY_ID("Regression");
   RegressionController * regressionController() { return &m_regressionController; }
 private:
-  App(Snapshot * snapshot);
+  App(Snapshot * snapshot, Poincare::Context * parentContext);
   CalculationController m_calculationController;
   AlternateEmptyViewController m_calculationAlternateEmptyViewController;
   ButtonRowController m_calculationHeader;

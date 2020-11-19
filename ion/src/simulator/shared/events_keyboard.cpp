@@ -1,5 +1,6 @@
 #include "main.h"
 #include "platform.h"
+#include "layout.h"
 
 #include <assert.h>
 #include <ion/events.h>
@@ -64,10 +65,14 @@ namespace Ion {
 namespace Events {
 
 static Event eventFromSDLKeyboardEvent(SDL_KeyboardEvent event) {
+  /* If an event is detected, we want to remove the Shift modifier to mimic the
+   * device behaviour. If no event was detected, we restore the previous
+   * ShiftAlphaStatus. */
+  Ion::Events::ShiftAlphaStatus previousShiftAlphaStatus = Ion::Events::shiftAlphaStatus();
+  Ion::Events::removeShift();
+
   if (event.keysym.mod & KMOD_CTRL) {
     switch (event.keysym.sym) {
-      case SDLK_BACKSPACE:
-        return Clear;
       case SDLK_x:
         return Cut;
       case SDLK_c:
@@ -88,14 +93,8 @@ static Event eventFromSDLKeyboardEvent(SDL_KeyboardEvent event) {
       }
     }
     switch (event.keysym.sym) {
-      case SDLK_ESCAPE:
-        return Home;
-      case SDLK_RETURN:
-        return OK;
       case SDLK_v:
         return Var;
-      case SDLK_BACKSPACE:
-        return Clear;
       case SDLK_x:
         return Exp;
       case SDLK_n:
@@ -125,25 +124,11 @@ static Event eventFromSDLKeyboardEvent(SDL_KeyboardEvent event) {
     }
   }
   switch(event.keysym.sym) {
-    case SDLK_UP:
-      return Up;
-    case SDLK_DOWN:
-      return Down;
-    case SDLK_LEFT:
-      return Left;
-    case SDLK_RIGHT:
-      return Right;
-    case SDLK_RETURN:
-      return EXE;
-    case SDLK_ESCAPE:
-      return Back;
-    case SDLK_TAB:
-      return Toolbox;
-    case SDLK_BACKSPACE:
-      return Backspace;
     case SDLK_AC_BACK:
       return Termination;
   }
+  // No event was detected, restore the previous ShiftAlphaStatus.
+  Ion::Events::setShiftAlphaStatus(previousShiftAlphaStatus);
   return None;
 }
 
@@ -168,6 +153,12 @@ static Event eventFromSDLTextInputEvent(SDL_TextInputEvent event) {
   }
   char character = event.text[0];
   if (character >= 32 && character < 127) {
+    /* We remove the shift, otherwise it might stay activated when it shouldn't.
+     * For instance on a French keyboard, to input "1", we first press "Shift"
+     * (which activates the Shift modifier on the calculator), then we press
+     * "&", transformed by eventFromSDLTextInputEvent into the text "1". If we
+     * do not remove the Shift here, it would still be pressed afterwards. */
+    Ion::Events::removeShift();
     return sEventForASCIICharAbove32[character-32];
   }
   return None;
@@ -181,28 +172,55 @@ Event getPlatformEvent() {
   }
 #endif
   SDL_Event event;
+  Event result = None;
   while (SDL_PollEvent(&event)) {
     // The while is important: it'll do a fast-pass over all useless SDL events
     if (event.type == SDL_WINDOWEVENT) {
-      if (event.window.event == SDL_WINDOWEVENT_RESIZED) {
-        Ion::Simulator::Main::relayout();
-      }
+      Ion::Simulator::Main::relayout();
+      break;
     }
     if (event.type == SDL_QUIT) {
-      return Termination;
+      result = Termination;
+      break;
     }
     if (event.type == SDL_KEYDOWN) {
-      return eventFromSDLKeyboardEvent(event.key);
+      if (IonSimulatorSDLKeyDetectedByScan(event.key.keysym.scancode)) {
+        continue;
+      }
+      result = eventFromSDLKeyboardEvent(event.key);
+      break;
     }
     if (event.type == SDL_TEXTINPUT) {
-      return eventFromSDLTextInputEvent(event.text);
+      result = eventFromSDLTextInputEvent(event.text);
+      break;
     }
-    if (event.type == SDL_APP_WILLENTERFOREGROUND) {
-      IonSimulatorTelemetryEvent("Calculator");
-      return None;
+#if !EPSILON_SDL_SCREEN_ONLY
+    if (event.type == SDL_MOUSEMOTION) {
+      SDL_Point p;
+      SDL_GetMouseState(&p.x, &p.y);
+      Simulator::Layout::highlightKeyAt(&p);
     }
+    /* On smarphones, don't forget to unhighlight the key when the finger is up.
+     * (finger up doesn't imply a mouse motion!) */
+    if (event.type == SDL_FINGERUP) {
+      Simulator::Layout::unhighlightKey();
+    }
+#endif
   }
-  return None;
+  if (result != None) {
+    /* When events are not being processed - for instance when a Python script
+     * is being executed - SDL puts all ingoing events in a queue.
+     * When events processing goes back to normal, all the queued events are
+     * processed, which can result in weird behaviours (for instance, really
+     * fast navigation in the calculator, "instantanate" text input, ...).
+     * These behaviours are even more visible if the script contains an infinite
+     * loop.
+     * To prevent that, we flush all queued events after encountering a non-null
+     * event -> the first event from the queue will still be processed, but not
+     * the subsequent ones. */
+    SDL_FlushEvents(0, UINT32_MAX);
+  }
+  return result;
 }
 
 }

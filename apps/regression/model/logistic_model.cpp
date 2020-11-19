@@ -1,4 +1,5 @@
 #include "logistic_model.h"
+#include "../store.h"
 #include <math.h>
 #include <assert.h>
 #include <poincare/code_point_layout.h>
@@ -12,29 +13,25 @@ namespace Regression {
 
 Layout LogisticModel::layout() {
   if (m_layout.isUninitialized()) {
-    constexpr int exponentSize = 4;
-    Layout exponentLayoutChildren[exponentSize] = {
-      CodePointLayout::Builder('-', k_layoutFont),
-      CodePointLayout::Builder('b', k_layoutFont),
-      CodePointLayout::Builder(UCodePointMiddleDot, k_layoutFont),
-      CodePointLayout::Builder('X', k_layoutFont)
-    };
-    constexpr int denominatorSize = 6;
-    Layout layoutChildren[denominatorSize] = {
-      CodePointLayout::Builder('1', k_layoutFont),
-      CodePointLayout::Builder('+', k_layoutFont),
-      CodePointLayout::Builder('a', k_layoutFont),
-      CodePointLayout::Builder(UCodePointMiddleDot, k_layoutFont),
-      CodePointLayout::Builder('e', k_layoutFont),
-      VerticalOffsetLayout::Builder(
-          HorizontalLayout::Builder(exponentLayoutChildren, exponentSize),
+    m_layout = FractionLayout::Builder(
+      CodePointLayout::Builder('c', k_layoutFont),
+      HorizontalLayout::Builder({
+        CodePointLayout::Builder('1', k_layoutFont),
+        CodePointLayout::Builder('+', k_layoutFont),
+        CodePointLayout::Builder('a', k_layoutFont),
+        CodePointLayout::Builder(UCodePointMiddleDot, k_layoutFont),
+        CodePointLayout::Builder('e', k_layoutFont),
+        VerticalOffsetLayout::Builder(
+          HorizontalLayout::Builder({
+            CodePointLayout::Builder('-', k_layoutFont),
+            CodePointLayout::Builder('b', k_layoutFont),
+            CodePointLayout::Builder(UCodePointMiddleDot, k_layoutFont),
+            CodePointLayout::Builder('X', k_layoutFont)
+          }),
           VerticalOffsetLayoutNode::Position::Superscript
         )
-    };
-    m_layout = FractionLayout::Builder(
-       CodePointLayout::Builder('c', k_layoutFont),
-       HorizontalLayout::Builder(layoutChildren, denominatorSize)
-      );
+      })
+    );
   }
   return m_layout;
 }
@@ -64,21 +61,30 @@ double LogisticModel::partialDerivate(double * modelCoefficients, int derivateCo
   double a = modelCoefficients[0];
   double b = modelCoefficients[1];
   double c = modelCoefficients[2];
-  double denominator = 1.0+a*exp(-b*x);
+  double denominator = 1.0 + a * exp(-b * x);
   if (derivateCoefficientIndex == 0) {
-    // Derivate: exp(-b*x)*(-1 * c/(1.0+a*exp(-b*x))^2)
-    return -exp(-b*x) * c/(denominator * denominator);
+    // Derivate with respect to a: exp(-b*x)*(-1 * c/(1.0+a*exp(-b*x))^2)
+    return -exp(-b * x) * c / (denominator * denominator);
   }
   if (derivateCoefficientIndex == 1) {
-    // Derivate: (-x)*a*exp(-b*x)*(-1/(1.0+a*exp(-b*x))^2)
-    return x*a*exp(-b*x)*c/(denominator * denominator);
+    // Derivate with respect to b: (-x)*a*exp(-b*x)*(-1/(1.0+a*exp(-b*x))^2)
+    return x * a * exp(-b * x) * c / (denominator * denominator);
   }
-  if (derivateCoefficientIndex == 2) {
-    // Derivate: (-x)*a*exp(-b*x)*(-1/(1.0+a*exp(-b*x))^2)
-    return 1.0/denominator;
-  }
-  assert(false);
-  return 0.0;
+  assert(derivateCoefficientIndex == 2);
+  // Derivate with respect to c: (-x)*a*exp(-b*x)*(-1/(1.0+a*exp(-b*x))^2)
+  return 1.0 / denominator;
 }
+
+void LogisticModel::specializedInitCoefficientsForFit(double * modelCoefficients, double defaultValue, Store * store, int series) const {
+  assert(store != nullptr && series >= 0 && series < Store::k_numberOfSeries && !store->seriesIsEmpty(series));
+  modelCoefficients[0] = defaultValue;
+  modelCoefficients[1] = defaultValue;
+  /* If the data is a standard logistic function, the ordinates are between 0
+   * and c. Twice the standard vertical deviation is a rough estimate of c
+   * that is "close enough" to c to seed the coefficient, without being too
+   * dependent on outliers.*/
+  modelCoefficients[2] = 2.0 * store->standardDeviationOfColumn(series, 1);
+}
+
 
 }

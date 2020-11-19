@@ -15,7 +15,7 @@ public:
   // Tree
   size_t size() const override { return sizeof(AdditionNode); }
 #if POINCARE_TREE_LOG
-  virtual void logNodeName(std::ostream & stream) const override {
+  void logNodeName(std::ostream & stream) const override {
     stream << "Addition";
   }
 #endif
@@ -25,7 +25,7 @@ public:
   // Properties
   Type type() const override { return Type::Addition; }
   int polynomialDegree(Context * context, const char * symbolName) const override;
-  int getPolynomialCoefficients(Context * context, const char * symbolName, Expression coefficients[]) const override;
+  int getPolynomialCoefficients(Context * context, const char * symbolName, Expression coefficients[], ExpressionNode::SymbolicComputation symbolicComputation) const override;
 
   // Evaluation
   template<typename T> static Complex<T> compute(const std::complex<T> c, const std::complex<T> d, Preferences::ComplexFormat complexFormat) { return Complex<T>::Builder(c+d); }
@@ -72,14 +72,16 @@ private:
 class Addition final : public NAryExpression {
 public:
   Addition(const AdditionNode * n) : NAryExpression(n) {}
-  static Addition Builder() { return TreeHandle::NAryBuilder<Addition, AdditionNode>(); }
-  static Addition Builder(Expression e1) { return Addition::Builder(&e1, 1); }
-  static Addition Builder(Expression e1, Expression e2) { return Addition::Builder(ArrayBuilder<Expression>(e1, e2).array(), 2); }
-  static Addition Builder(Expression * children, size_t numberOfChildren) { return TreeHandle::NAryBuilder<Addition, AdditionNode>(children, numberOfChildren); }
+  static Addition Builder(const Tuple & children = {}) {
+    return TreeHandle::NAryBuilder<Addition, AdditionNode>(convert(children));
+  }
+  // TODO: Get rid of these two helper functions
+  static Addition Builder(Expression e1) { return Addition::Builder({e1}); }
+  static Addition Builder(Expression e1, Expression e2) { return Addition::Builder({e1, e2}); }
   // Expression
   Expression shallowReduce(ExpressionNode::ReductionContext reductionContext);
   Expression shallowBeautify(ExpressionNode::ReductionContext reductionContext);
-  int getPolynomialCoefficients(Context * context, const char * symbolName, Expression coefficients[]) const;
+  int getPolynomialCoefficients(Context * context, const char * symbolName, Expression coefficients[], ExpressionNode::SymbolicComputation symbolicComputation) const;
   void sortChildrenInPlace(NAryExpressionNode::ExpressionOrder order, Context * context, bool canBeInterrupted) {
     NAryExpression::sortChildrenInPlace(order, context, true, canBeInterrupted);
   }

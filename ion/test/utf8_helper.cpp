@@ -45,10 +45,10 @@ QUIZ_CASE(ion_utf8_helper_not_code_point_search) {
   assert_not_code_point_searched_is(s, UCodePointGreekSmallLetterPi, true, s+5, s+2);
 }
 
-void assert_copy_and_remove_code_point_gives(char * dst, size_t dstSize, const char * src, CodePoint c, const char * result) {
+void assert_copy_and_remove_code_points_gives(char * dst, size_t dstSize, const char * src, CodePoint * c, int numberOfCodePoints, const char * result) {
   size_t resultLen = strlen(result);
   quiz_assert(dstSize >= resultLen + 1);
-  UTF8Helper::CopyAndRemoveCodePoint(dst, dstSize, src, c);
+  UTF8Helper::CopyAndRemoveCodePoints(dst, dstSize, src, c, numberOfCodePoints);
   for (size_t i = 0; i <= resultLen; i++) {
     quiz_assert(dst[i] == result[i]);
   }
@@ -59,49 +59,54 @@ QUIZ_CASE(ion_utf8_copy_and_remove_code_point) {
   char buffer[bufferSize];
 
   const char * s = "12345";
-  CodePoint c = '1';
+  CodePoint c1[] = {'1'};
   const char * result = "2345";
-  assert_copy_and_remove_code_point_gives(buffer, bufferSize, s, c, result);
+  assert_copy_and_remove_code_points_gives(buffer, bufferSize, s, c1, 1, result);
 
   s = "12345";
-  c = '2';
+  CodePoint c2[] = {'2'};
   result = "1345";
-  assert_copy_and_remove_code_point_gives(buffer, bufferSize, s, c, result);
+  assert_copy_and_remove_code_points_gives(buffer, bufferSize, s, c2, 1, result);
 
   s = "2123224252";
-  c = '2';
+  CodePoint c3[] = {'2'};
   result = "1345";
-  assert_copy_and_remove_code_point_gives(buffer, bufferSize, s, c, result);
+  assert_copy_and_remove_code_points_gives(buffer, bufferSize, s, c3, 1, result);
 
   s = "12345";
-  c = '6';
+  CodePoint c4[] = {'6'};
   result = "12345";
-  assert_copy_and_remove_code_point_gives(buffer, bufferSize, s, c, result);
+  assert_copy_and_remove_code_points_gives(buffer, bufferSize, s, c4, 1, result);
 
   s = "12ᴇ4";
-  c = UCodePointLatinLetterSmallCapitalE;
+  CodePoint c5[] = {UCodePointLatinLetterSmallCapitalE};
   result = "124";
-  assert_copy_and_remove_code_point_gives(buffer, bufferSize, s, c, result);
+  assert_copy_and_remove_code_points_gives(buffer, bufferSize, s, c5, 1, result);
 
   s = "12ᴇᴇᴇ4";
-  c = UCodePointLatinLetterSmallCapitalE;
+  CodePoint c6[] = {UCodePointLatinLetterSmallCapitalE};
   result = "124";
-  assert_copy_and_remove_code_point_gives(buffer, bufferSize, s, c, result);
+  assert_copy_and_remove_code_points_gives(buffer, bufferSize, s, c6, 1, result);
 
   // The buffer size is to small to hold s
   s = "1234ᴇ";
-  c = '5';
+  CodePoint c7[] = {'5'};
   result = "1234"; // "1234ᴇ" size is 7
-  assert_copy_and_remove_code_point_gives(buffer, 6, s, c, result);
-  assert_copy_and_remove_code_point_gives(buffer, 7, s, c, result);
+  assert_copy_and_remove_code_points_gives(buffer, 6, s, c7, 1, result);
+  assert_copy_and_remove_code_points_gives(buffer, 7, s, c7, 1, result);
   result = "1234ᴇ";
-  assert_copy_and_remove_code_point_gives(buffer, 8, s, c, result);
+  assert_copy_and_remove_code_points_gives(buffer, 8, s, c7, 1, result);
 
   s = "1234ᴇ";
-  c = '4';
+  CodePoint c8[] = {'4'};
   result = "123ᴇ";
-  assert_copy_and_remove_code_point_gives(buffer, 7, s, c, result);
+  assert_copy_and_remove_code_points_gives(buffer, 7, s, c8, 1, result);
 
+  // Remove several code points
+  s = "1234ᴇ3";
+  CodePoint c9[] = {'4', UCodePointLatinLetterSmallCapitalE};
+  result = "1233";
+  assert_copy_and_remove_code_points_gives(buffer, bufferSize, s, c9, 2, result);
 }
 
 void assert_remove_code_point_gives(char * buffer, CodePoint c, const char * * indexToUpdate, const char * stoppingPosition, const char * indexToUpdateResult, const char * result) {
@@ -267,4 +272,30 @@ QUIZ_CASE(ion_utf8_helper_string_glyph_length) {
   assert_string_glyph_length_is("123", 2, 2);
   uint8_t testString[] = {'a', 'b', 'c', 0b11111111, 0b11111111, 0}; // Malformed utf-8 string
   assert_string_glyph_length_is((const char *)testString, 3, 3);
+}
+
+
+void assert_beginning_of_word_is(const char * text, const char * word, const char * beginningOfWord) {
+  quiz_assert(UTF8Helper::BeginningOfWord(text, word) == beginningOfWord);
+}
+
+QUIZ_CASE(ion_utf8_helper_beginning_of_word) {
+  const char * test_sentence = "01 34+ \n89";
+  assert_beginning_of_word_is(test_sentence, test_sentence, test_sentence);
+  assert_beginning_of_word_is(test_sentence, test_sentence + 1, test_sentence);
+  assert_beginning_of_word_is(test_sentence, test_sentence + 2, test_sentence);
+  assert_beginning_of_word_is(test_sentence, test_sentence + 5, test_sentence + 3);
+  assert_beginning_of_word_is(test_sentence, test_sentence + 8, test_sentence + 8);
+}
+
+void assert_end_of_word_is(const char * word, const char * endOfWord) {
+  quiz_assert(UTF8Helper::EndOfWord(word) == endOfWord);
+}
+
+QUIZ_CASE(ion_utf8_helper_end_of_word) {
+  const char * test_sentence = "01 34+ 789";
+  assert_end_of_word_is(test_sentence, test_sentence + 2);
+  assert_end_of_word_is(test_sentence + 2, test_sentence + 2);
+  assert_end_of_word_is(test_sentence + 3, test_sentence + 6);
+  assert_end_of_word_is(test_sentence + 8, test_sentence + 10);
 }

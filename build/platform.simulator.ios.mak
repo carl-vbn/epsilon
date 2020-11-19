@@ -3,9 +3,10 @@ EXE = bin
 
 APPLE_PLATFORM ?= ios
 APPLE_PLATFORM_MIN_VERSION = 8.0
+EPSILON_TELEMETRY ?= 1
 
 ifeq ($(APPLE_PLATFORM),ios)
-ARCHS ?= arm64 armv7
+ARCHS = arm64 armv7
 UI_REQUIRED_CAPABILITIES += armv7
 else ifeq ($(APPLE_PLATFORM),ios-simulator)
 ARCHS = x86_64
@@ -15,4 +16,6 @@ BUILD_DIR := $(subst $(TARGET),$(APPLE_PLATFORM),$(BUILD_DIR))
 
 ifdef ARCH
 BUILD_DIR := $(BUILD_DIR)/$(ARCH)
+else
+HANDY_TARGETS_EXTENSIONS = ipa app
 endif

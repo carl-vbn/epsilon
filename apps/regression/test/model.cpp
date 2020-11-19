@@ -1,6 +1,7 @@
 #include <quiz.h>
 #include <string.h>
 #include <assert.h>
+#include <apps/shared/global_context.h>
 #include "../model/model.h"
 #include "../regression_context.h"
 #include "../store.h"
@@ -21,7 +22,8 @@ void assert_regression_is(double * xi, double * yi, int numberOfPoints, Model::T
     store.set(xi[i], series, 0, i);
     store.set(yi[i], series, 1, i);
   }
-  RegressionContext context(&store);
+  Shared::GlobalContext globalContext;
+  RegressionContext context(&store, &globalContext);
   store.setSeriesRegressionType(series, modelType);
 
   // Compute the coefficients
@@ -39,6 +41,21 @@ QUIZ_CASE(linear_regression) {
   double y[] = {-3.581, 20.296, 40.676, 261.623};
   double coefficients[] = {3.4, -7.0};
   assert_regression_is(x, y, 4, Model::Type::Linear, coefficients);
+}
+
+QUIZ_CASE(proportional_regression) {
+  double x[] = {7.0, 5.0, 1.0, 9.0, 3.0};
+  double y[] = {-41.4851, -29.62186, -6.454245, -53.4976, -18.03325};
+  double coefficients[] = {-5.89};
+  assert_regression_is(x, y, 5, Model::Type::Proportional, coefficients);
+}
+
+QUIZ_CASE(proportional_regression2) {
+  constexpr int numberOfPoints = 4;
+  double x[numberOfPoints] = {5.0, 2.0, 3.0, 4.0};
+  double y[numberOfPoints] = {10.0, 6.0, 7.0, 8.0};
+  double coefficients[] = {2.12963963};
+  assert_regression_is(x, y, numberOfPoints, Model::Type::Proportional, coefficients);
 }
 
 QUIZ_CASE(quadratic_regression) {
@@ -99,11 +116,18 @@ QUIZ_CASE(power_regression) {
 
 // No case for trigonometric regression, because it has no unique solution
 
-/* This data was generated without the random error, otherwise it did not pass
- * the test. */
+
 QUIZ_CASE(logistic_regression) {
-  double x[] = {2.3, 5.6, 1.1, 4.3};
-  double y[] = {3.948, 4.694, 2.184, 4.656};
-  double coefficients[] = {6, 1.5, 4.7};
-  assert_regression_is(x, y, 4, Model::Type::Logistic, coefficients);
+  /* This data was generated without the random error, otherwise it did not pass
+   * the test. */
+  double x1[] = {2.3, 5.6, 1.1, 4.3};
+  double y1[] = {3.948, 4.694, 2.184, 4.656};
+  double coefficients1[] = {6, 1.5, 4.7};
+  assert_regression_is(x1, y1, 4, Model::Type::Logistic, coefficients1);
+
+  // This data produced a wrong fit before
+  double x2[] = {0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0};
+  double y2[] = {5.0, 9.0, 40.0, 64.0, 144.0, 200.0, 269.0, 278.0, 290.0, 295.0};
+  double coefficients2[] = {64.9, 1.0, 297.4};
+  assert_regression_is(x2, y2, 10, Model::Type::Logistic, coefficients2);
 }

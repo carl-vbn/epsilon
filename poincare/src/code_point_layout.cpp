@@ -5,7 +5,7 @@
 namespace Poincare {
 
 // LayoutNode
-void CodePointLayoutNode::moveCursorLeft(LayoutCursor * cursor, bool * shouldRecomputeLayout) {
+void CodePointLayoutNode::moveCursorLeft(LayoutCursor * cursor, bool * shouldRecomputeLayout, bool forSelection) {
   if (cursor->position() == LayoutCursor::Position::Right) {
     cursor->setPosition(LayoutCursor::Position::Left);
     return;
@@ -16,7 +16,7 @@ void CodePointLayoutNode::moveCursorLeft(LayoutCursor * cursor, bool * shouldRec
   }
 }
 
-void CodePointLayoutNode::moveCursorRight(LayoutCursor * cursor, bool * shouldRecomputeLayout) {
+void CodePointLayoutNode::moveCursorRight(LayoutCursor * cursor, bool * shouldRecomputeLayout, bool forSelection) {
   if (cursor->position() == LayoutCursor::Position::Left) {
     cursor->setPosition(LayoutCursor::Position::Right);
     return;
@@ -58,22 +58,22 @@ bool CodePointLayoutNode::isCollapsable(int * numberOfOpenParenthesis, bool goin
       }
       return false;
     }
-  }
-  if (isMultiplicationCodePoint()) {
-    /* We want '*' to be collapsable only if the following brother is not a
-     * fraction, so that the user can write intuitively "1/2 * 3/4". */
-    Layout thisRef = CodePointLayout(this);
-    Layout parent = thisRef.parent();
-    if (!parent.isUninitialized()) {
-      int indexOfThis = parent.indexOfChild(thisRef);
-      Layout brother;
-      if (indexOfThis > 0 && goingLeft) {
-        brother = parent.childAtIndex(indexOfThis-1);
-      } else if (indexOfThis < parent.numberOfChildren() - 1 && !goingLeft) {
-        brother = parent.childAtIndex(indexOfThis+1);
-      }
-      if (!brother.isUninitialized() && brother.type() == LayoutNode::Type::FractionLayout) {
-        return false;
+    if (isMultiplicationCodePoint()) {
+      /* We want '*' to be collapsable only if the following brother is not a
+       * fraction, so that the user can write intuitively "1/2 * 3/4". */
+      Layout thisRef = CodePointLayout(this);
+      Layout parent = thisRef.parent();
+      if (!parent.isUninitialized()) {
+        int indexOfThis = parent.indexOfChild(thisRef);
+        Layout brother;
+        if (indexOfThis > 0 && goingLeft) {
+          brother = parent.childAtIndex(indexOfThis-1);
+        } else if (indexOfThis < parent.numberOfChildren() - 1 && !goingLeft) {
+          brother = parent.childAtIndex(indexOfThis+1);
+        }
+        if (!brother.isUninitialized() && brother.type() == LayoutNode::Type::FractionLayout) {
+          return false;
+        }
       }
     }
   }
@@ -84,7 +84,7 @@ bool CodePointLayoutNode::canBeOmittedMultiplicationLeftFactor() const {
   if (isMultiplicationCodePoint()) {
     return false;
   }
-  return LayoutNode::canBeOmittedMultiplicationRightFactor();
+  return LayoutNode::canBeOmittedMultiplicationLeftFactor();
 }
 
 bool CodePointLayoutNode::canBeOmittedMultiplicationRightFactor() const {
@@ -103,7 +103,7 @@ KDCoordinate CodePointLayoutNode::computeBaseline() {
   return m_font->glyphSize().height()/2;
 }
 
-void CodePointLayoutNode::render(KDContext * ctx, KDPoint p, KDColor expressionColor, KDColor backgroundColor) {
+void CodePointLayoutNode::render(KDContext * ctx, KDPoint p, KDColor expressionColor, KDColor backgroundColor, Layout * selectionStart, Layout * selectionEnd, KDColor selectionColor) {
   constexpr int bufferSize = sizeof(CodePoint)/sizeof(char) + 1; // Null-terminating char
   char buffer[bufferSize];
   SerializationHelper::CodePoint(buffer, bufferSize, m_codePoint);

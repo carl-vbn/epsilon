@@ -5,6 +5,11 @@
 #include "history_view_cell.h"
 #include "calculation_store.h"
 #include "selectable_table_view.h"
+#include "additional_outputs/complex_list_controller.h"
+#include "additional_outputs/integer_list_controller.h"
+#include "additional_outputs/rational_list_controller.h"
+#include "additional_outputs/trigonometry_list_controller.h"
+#include "additional_outputs/unit_list_controller.h"
 
 namespace Calculation {
 
@@ -12,9 +17,11 @@ class App;
 
 class HistoryController : public ViewController, public ListViewDataSource, public SelectableTableViewDataSource, public SelectableTableViewDelegate, public HistoryViewCellDataSource {
 public:
-  HistoryController(Responder * parentResponder, CalculationStore * calculationStore);
+  HistoryController(EditExpressionController * editExpressionController, CalculationStore * calculationStore);
   View * view() override { return &m_selectableTableView; }
   bool handleEvent(Ion::Events::Event event) override;
+  void viewWillAppear() override;
+  TELEMETRY_ID("");
   void didBecomeFirstResponder() override;
   void willExitResponderChain(Responder * nextFirstResponder) override;
   void reload();
@@ -24,17 +31,23 @@ public:
   void willDisplayCellForIndex(HighlightCell * cell, int index) override;
   KDCoordinate rowHeight(int j) override;
   int typeAtLocation(int i, int j) override;
-  void tableViewDidChangeSelection(SelectableTableView * t, int previousSelectedCellX, int previousSelectedCellY, bool withinTemporarySelection = false) override;
-  void scrollToCell(int i, int j);
+  void setSelectedSubviewType(SubviewType subviewType, bool sameCell, int previousSelectedX = -1, int previousSelectedY = -1) override;
+  void tableViewDidChangeSelectionAndDidScroll(SelectableTableView * t, int previousSelectedCellX, int previousSelectedCellY, bool withinTemporarySelection = false) override;
 private:
   int storeIndex(int i) { return numberOfRows() - i - 1; }
   Shared::ExpiringPointer<Calculation> calculationAtIndex(int i);
   CalculationSelectableTableView * selectableTableView();
-  HistoryViewCell * historyViewCellDidChangeSelection() override;
-  constexpr static int k_maxNumberOfDisplayedRows = 5;
+  bool calculationAtIndexToggles(int index);
+  void historyViewCellDidChangeSelection(HistoryViewCell ** cell, HistoryViewCell ** previousCell, int previousSelectedCellX, int previousSelectedCellY, SubviewType type, SubviewType previousType) override;
+  constexpr static int k_maxNumberOfDisplayedRows = 8;
   CalculationSelectableTableView m_selectableTableView;
   HistoryViewCell m_calculationHistory[k_maxNumberOfDisplayedRows];
   CalculationStore * m_calculationStore;
+  ComplexListController m_complexController;
+  IntegerListController m_integerController;
+  RationalListController m_rationalController;
+  TrigonometryListController m_trigonometryController;
+  UnitListController m_unitController;
 };
 
 }

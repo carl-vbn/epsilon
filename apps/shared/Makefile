@@ -1,6 +1,8 @@
 app_shared_test_src = $(addprefix apps/shared/,\
   continuous_function.cpp\
   curve_view_range.cpp \
+  curve_view.cpp \
+  dots.cpp \
   double_pair_store.cpp \
   expression_model.cpp \
   expression_model_handle.cpp \
@@ -9,9 +11,12 @@ app_shared_test_src = $(addprefix apps/shared/,\
   global_context.cpp \
   interactive_curve_view_range_delegate.cpp \
   interactive_curve_view_range.cpp \
+  labeled_curve_view.cpp \
   memoized_curve_view_range.cpp \
   range_1D.cpp \
-  store_context.cpp \
+  toolbox_helpers.cpp \
+  zoom_and_pan_curve_view_controller.cpp \
+  zoom_curve_view_controller.cpp \
 )
 
 app_shared_src = $(addprefix apps/shared/,\
@@ -20,7 +25,6 @@ app_shared_src = $(addprefix apps/shared/,\
   buffer_text_view_with_text_field.cpp \
   button_with_separator.cpp \
   cursor_view.cpp \
-  curve_view.cpp \
   curve_view_cursor.cpp \
   editable_cell_table_view_controller.cpp \
   expression_field_delegate_app.cpp \
@@ -55,8 +59,8 @@ app_shared_src = $(addprefix apps/shared/,\
   range_parameter_controller.cpp \
   regular_table_view_data_source.cpp \
   round_cursor_view.cpp \
-  scrollable_exact_approximate_expressions_cell.cpp \
-  scrollable_exact_approximate_expressions_view.cpp \
+  scrollable_multiple_expressions_view.cpp \
+  scrollable_two_expressions_cell.cpp \
   separable.cpp \
   separator_even_odd_buffer_text_cell.cpp \
   simple_interactive_curve_view_controller.cpp \
@@ -71,7 +75,6 @@ app_shared_src = $(addprefix apps/shared/,\
   text_field_delegate_app.cpp \
   text_field_with_extension.cpp \
   text_helpers.cpp \
-  toolbox_helpers.cpp \
   values_controller.cpp \
   values_function_parameter_controller.cpp \
   values_parameter_controller.cpp \
@@ -81,4 +84,4 @@ app_shared_src = $(addprefix apps/shared/,\
 )
 
 app_shared_src += $(app_shared_test_src)
-app_src += $(app_shared_src)
+apps_src += $(app_shared_src)

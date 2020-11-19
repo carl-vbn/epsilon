@@ -21,19 +21,24 @@ public:
   void setShowPopUp(bool showPopUp) { m_showPopUp = showPopUp; }
   int brightnessLevel() const { return m_brightnessLevel; }
   void setBrightnessLevel(int brightnessLevel);
-  constexpr static int NumberOfBrightnessStates = 5;
+  const KDFont * font() const { return m_font; }
+  void setFont(const KDFont * font) { m_font = font; }
+  constexpr static int NumberOfBrightnessStates = 12;
 private:
+  static_assert(I18n::NumberOfLanguages > 0, "I18n::NumberOfLanguages is not superior to 0"); // There should already have be an error when processing an empty EPSILON_I18N flag
   GlobalPreferences() :
-    m_language(I18n::Language::EN),
+    m_language((I18n::Language)0),
     m_examMode(ExamMode::Unknown),
     m_showPopUp(true),
-    m_brightnessLevel(Ion::Backlight::MaxBrightness) {}
+    m_brightnessLevel(Ion::Backlight::MaxBrightness),
+    m_font(KDFont::LargeFont) {}
   I18n::Language m_language;
   static_assert((int8_t)GlobalPreferences::ExamMode::Off == 0, "GlobalPreferences::isInExamMode() is not right");
   static_assert((int8_t)GlobalPreferences::ExamMode::Unknown < 0, "GlobalPreferences::isInExamMode() is not right");
   mutable ExamMode m_examMode;
   bool m_showPopUp;
   int m_brightnessLevel;
+  const KDFont * m_font;
 };
 
 #endif

@@ -2,15 +2,25 @@ HOSTCC = gcc
 HOSTCXX = g++
 PYTHON = python3
 
+SFLAGS += -DEPSILON_GETOPT=$(EPSILON_GETOPT)
+SFLAGS += -DEPSILON_TELEMETRY=$(EPSILON_TELEMETRY)
+SFLAGS += -DESCHER_LOG_EVENTS_BINARY=$(ESCHER_LOG_EVENTS_BINARY)
+
 # Language-specific flags
 CFLAGS = -std=c99
 CXXFLAGS = -std=c++11 -fno-exceptions -fno-rtti -fno-threadsafe-statics
 
 # Flags - Optimizations
 ifeq ($(DEBUG),1)
-SFLAGS = -O0 -g
+SFLAGS += -O0 -g
 else
-SFLAGS = -Os
+SFLAGS += -Os
+SFLAGS += -DNDEBUG
+endif
+
+ifeq ($(ASAN),1)
+SFLAGS += -fsanitize=address
+LDFLAGS += -fsanitize=address
 endif
 
 # Flags - Header search path
@@ -40,6 +50,10 @@ ifeq ("$(origin V)", "command line")
     BUILD_VERBOSE=1
     Q=
   endif
+endif
+
+ifeq ("$(PLATFORM)", "device")
+  SFLAGS += -DPLATFORM_DEVICE
 endif
 
 # Host detection

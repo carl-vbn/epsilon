@@ -1,14 +1,13 @@
 #include <poincare/grid_layout.h>
 #include <poincare/empty_layout.h>
 #include <poincare/layout_helper.h>
+#include <algorithm>
 
 namespace Poincare {
 
-static inline KDCoordinate maxCoordinate(KDCoordinate x, KDCoordinate y) { return x > y ? x : y; }
-
 // LayoutNode
 
-void GridLayoutNode::moveCursorLeft(LayoutCursor * cursor, bool * shouldRecomputeLayout) {
+void GridLayoutNode::moveCursorLeft(LayoutCursor * cursor, bool * shouldRecomputeLayout, bool forSelection) {
   if (cursor->layoutNode() == this && cursor->position() == LayoutCursor::Position::Right) {
     // Case: Right. Go to the last entry.
     cursor->setLayoutNode(childAtIndex(numberOfChildren() - 1));
@@ -36,7 +35,7 @@ void GridLayoutNode::moveCursorLeft(LayoutCursor * cursor, bool * shouldRecomput
   }
 }
 
-void GridLayoutNode::moveCursorRight(LayoutCursor * cursor, bool * shouldRecomputeLayout) {
+void GridLayoutNode::moveCursorRight(LayoutCursor * cursor, bool * shouldRecomputeLayout, bool forSelection) {
   if (cursor->layoutNode() == this && cursor->position() == LayoutCursor::Position::Left) {
     // Case: Left. Go to the first entry.
     assert(numberOfChildren() >= 1);
@@ -65,7 +64,7 @@ void GridLayoutNode::moveCursorRight(LayoutCursor * cursor, bool * shouldRecompu
   }
 }
 
-void GridLayoutNode::moveCursorUp(LayoutCursor * cursor, bool * shouldRecomputeLayout, bool equivalentPositionVisited) {
+void GridLayoutNode::moveCursorUp(LayoutCursor * cursor, bool * shouldRecomputeLayout, bool equivalentPositionVisited, bool forSelection) {
   /* If the cursor is child that is not on the top row, move it inside its upper
    * neighbour. */
   int childIndex = m_numberOfColumns;
@@ -79,7 +78,7 @@ void GridLayoutNode::moveCursorUp(LayoutCursor * cursor, bool * shouldRecomputeL
   LayoutNode::moveCursorUp(cursor, shouldRecomputeLayout, equivalentPositionVisited);
 }
 
-void GridLayoutNode::moveCursorDown(LayoutCursor * cursor, bool * shouldRecomputeLayout, bool equivalentPositionVisited) {
+void GridLayoutNode::moveCursorDown(LayoutCursor * cursor, bool * shouldRecomputeLayout, bool equivalentPositionVisited, bool forSelection) {
   int childIndex = 0;
   int maxIndex = numberOfChildren() - m_numberOfColumns;
   for (LayoutNode * l : children()) {
@@ -219,7 +218,7 @@ KDCoordinate GridLayoutNode::rowBaseline(int i) {
   KDCoordinate rowBaseline = 0;
   int j = 0;
   for (LayoutNode * l : childrenFromIndex(i*m_numberOfColumns)) {
-    rowBaseline = maxCoordinate(rowBaseline, l->baseline());
+    rowBaseline = std::max(rowBaseline, l->baseline());
     j++;
     if (j >= m_numberOfColumns) {
       break;
@@ -234,8 +233,8 @@ KDCoordinate GridLayoutNode::rowHeight(int i) const {
   int j = 0;
   for (LayoutNode * l : const_cast<GridLayoutNode *>(this)->childrenFromIndex(i*m_numberOfColumns)) {
     KDCoordinate b = l->baseline();
-    underBaseline = maxCoordinate(underBaseline, l->layoutSize().height() - b);
-    aboveBaseline = maxCoordinate(aboveBaseline, b);
+    underBaseline = std::max<KDCoordinate>(underBaseline, l->layoutSize().height() - b);
+    aboveBaseline = std::max(aboveBaseline, b);
     j++;
     if (j >= m_numberOfColumns) {
       break;
@@ -259,7 +258,7 @@ KDCoordinate GridLayoutNode::columnWidth(int j) const {
   int lastIndex = (m_numberOfRows-1)*m_numberOfColumns + j;
   for (LayoutNode * l : const_cast<GridLayoutNode *>(this)->childrenFromIndex(j)) {
     if (childIndex%m_numberOfColumns == j) {
-      columnWidth = maxCoordinate(columnWidth, l->layoutSize().width());
+      columnWidth = std::max(columnWidth, l->layoutSize().width());
       if (childIndex >= lastIndex) {
         break;
       }

@@ -4,10 +4,9 @@
 #include "../constant.h"
 #include <escher/metric.h>
 #include <assert.h>
+#include <algorithm>
 
 using namespace Poincare;
-
-static inline int minInt(int x, int y) { return x < y ? x : y; }
 
 namespace Shared {
 
@@ -44,10 +43,10 @@ View * StoreController::ContentView::subviewAtIndex(int index) {
   return views[index];
 }
 
-void StoreController::ContentView::layoutSubviews() {
+void StoreController::ContentView::layoutSubviews(bool force) {
   KDRect dataViewFrame(0, 0, bounds().width(), bounds().height() - (m_displayFormulaInputView ? k_formulaInputHeight : 0));
-  m_dataView.setFrame(dataViewFrame);
-  m_formulaInputView.setFrame(formulaFrame());
+  m_dataView.setFrame(dataViewFrame, force);
+  m_formulaInputView.setFrame(formulaFrame(), force);
 }
 
 KDRect StoreController::ContentView::formulaFrame() const {
@@ -82,7 +81,7 @@ bool StoreController::textFieldShouldFinishEditing(TextField * textField, Ion::E
 bool StoreController::textFieldDidFinishEditing(TextField * textField, const char * text, Ion::Events::Event event) {
   if (textField == m_contentView.formulaInputView()->textField()) {
     // Handle formula input
-    Expression expression = Expression::Parse(textField->text());
+    Expression expression = Expression::Parse(textField->text(), storeContext());
     if (expression.isUninitialized()) {
       Container::activeApp()->displayWarning(I18n::Message::SyntaxError);
       return false;
@@ -245,7 +244,7 @@ bool StoreController::privateFillColumnWithFormula(Expression formula, Expressio
     if (numberOfValuesToCompute == -1) {
       numberOfValuesToCompute = m_store->numberOfPairsOfSeries(series);
     } else {
-      numberOfValuesToCompute = minInt(numberOfValuesToCompute, m_store->numberOfPairsOfSeries(series));
+      numberOfValuesToCompute = std::min(numberOfValuesToCompute, m_store->numberOfPairsOfSeries(series));
     }
     index++;
   }

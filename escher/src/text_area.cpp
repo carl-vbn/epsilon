@@ -3,12 +3,12 @@
 #include <escher/text_input_helpers.h>
 #include <ion/unicode/utf8_decoder.h>
 #include <ion/unicode/utf8_helper.h>
+#include <poincare/serialization_helper.h>
 
 #include <stddef.h>
 #include <assert.h>
 #include <limits.h>
-
-static inline const char * minPointer(const char * x, const char * y) { return x < y ? x : y; }
+#include <algorithm>
 
 /* TextArea */
 
@@ -37,6 +37,12 @@ bool TextArea::handleEventWithText(const char * text, bool indentation, bool for
   if (*text == 0) {
     return false;
   }
+
+  // Delete the selected text if needed
+  if (!contentView()->selectionIsEmpty()) {
+    deleteSelection();
+  }
+
   /* Compute the indentation. If the text cannot be inserted with the
    * indentation, stop here. */
   int spacesCount = 0;
@@ -96,32 +102,75 @@ bool TextArea::handleEventWithText(const char * text, bool indentation, bool for
 bool TextArea::handleEvent(Ion::Events::Event event) {
   if (m_delegate != nullptr && m_delegate->textAreaDidReceiveEvent(this, event)) {
     return true;
-  } else if (handleBoxEvent(event)) {
+  }
+  if (handleBoxEvent(event)) {
     return true;
-  } else if (event == Ion::Events::Left) {
+  }
+  if (event == Ion::Events::ShiftLeft || event == Ion::Events::ShiftRight) {
+    selectLeftRight(event == Ion::Events::ShiftLeft, false);
+    return true;
+  }
+  if (event == Ion::Events::ShiftUp ||event == Ion::Events::ShiftDown) {
+    selectUpDown(event == Ion::Events::ShiftUp);
+    return true;
+  }
+  if (event == Ion::Events::Left) {
+    if (contentView()->resetSelection()) {
+      return true;
+    }
     return TextInput::moveCursorLeft();
-  } else if (event == Ion::Events::Right) {
+  }
+  if (event == Ion::Events::Right) {
+    if (contentView()->resetSelection()) {
+      return true;
+    }
     return TextInput::moveCursorRight();
+  }
+
+  if (event.hasText()) {
+    return handleEventWithText(event.text());
+  }
+  if (event == Ion::Events::EXE) {
+    return handleEventWithText("\n");
+  }
+  if (event == Ion::Events::Copy || event == Ion::Events::Cut) {
+    if (contentView()->selectionIsEmpty()) {
+      return false;
+    }
+    const char * start = contentView()->selectionStart();
+    Clipboard::sharedClipboard()->store(start, contentView()->selectionEnd() - start);
+    if (event == Ion::Events::Cut) {
+      deleteSelection();
+    }
+    return true;
+  }
+  if (event == Ion::Events::Paste) {
+    return handleEventWithText(Clipboard::sharedClipboard()->storedText(), false, true);
+  }
+
+  // The following events need a scrollToCursor and return true
+  if (event == Ion::Events::Backspace) {
+    if (contentView()->selectionIsEmpty()) {
+      if (!removePreviousGlyph()) {
+        return false;
+      }
+    } else {
+      deleteSelection();
+      return true;
+    }
   } else if (event == Ion::Events::Up) {
+    contentView()->resetSelection();
     contentView()->moveCursorGeo(0, -1);
   } else if (event == Ion::Events::Down) {
+    contentView()->resetSelection();
     contentView()->moveCursorGeo(0, 1);
-  } else if (event == Ion::Events::ShiftLeft) {
-    contentView()->moveCursorGeo(-INT_MAX/2, 0);
-  } else if (event == Ion::Events::ShiftRight) {
-    contentView()->moveCursorGeo(INT_MAX/2, 0);
-  } else if (event == Ion::Events::Backspace) {
-    return removePreviousGlyph();
-  } else if (event.hasText()) {
-    return handleEventWithText(event.text());
-  } else if (event == Ion::Events::EXE) {
-    return handleEventWithText("\n");
   } else if (event == Ion::Events::Clear) {
-    if (!contentView()->removeEndOfLine()) {
+    if (!contentView()->selectionIsEmpty()) {
+      deleteSelection();
+      return true;
+    } else if (!contentView()->removeEndOfLine()) {
       contentView()->removeStartOfLine();
     }
-  } else if (event == Ion::Events::Paste) {
-    return handleEventWithText(Clipboard::sharedClipboard()->storedText());
   } else {
     return false;
   }
@@ -141,11 +190,11 @@ int TextArea::indentationBeforeCursor() const {
    * another code point, until reaching the beginning of the line. */
   UTF8Helper::PerformAtCodePoints(const_cast<TextArea *>(this)->contentView()->text(), ' ',
       [](int codePointOffset, void * indentationSize, int context1, int context2){
-        int * castedSize = (int *) indentationSize;
-        *castedSize = *castedSize + 1;
+      int * castedSize = (int *) indentationSize;
+      *castedSize = *castedSize + 1;
       },
       [](int codePointOffset, void * indentationSize, int context1, int context2){
-        *((int *) indentationSize) = 0;
+      *((int *) indentationSize) = 0;
       },
       &indentationSize, 0, -1, '\n', false, cursorLocation());
   return indentationSize;
@@ -162,7 +211,7 @@ const char * TextArea::Text::pointerAtPosition(Position p) {
   for (Line l : *this) {
     if (p.line() == y) {
       const char * result = UTF8Helper::CodePointAtGlyphOffset(l.text(), p.column());
-      return minPointer(result, l.text() + l.charLength());
+      return std::min(result, l.text() + l.charLength());
     }
     y++;
   }
@@ -188,11 +237,16 @@ void TextArea::Text::insertText(const char * s, int textLength, char * location)
   assert(m_buffer != nullptr);
   assert(location >= m_buffer && location < m_buffer + m_bufferSize - 1);
   assert(strlen(m_buffer) + textLength < m_bufferSize);
+  // assert the text to insert does not overlap the location where to insert
+  assert(s >= location || s + textLength < location);
 
+  /* The text to insert might be located after the insertion location, in which
+   * case we cannot simply do a memmove, as s will be shifted by the copy. */
+  bool noShift = (s + textLength < location) || (s > m_buffer + m_bufferSize);
   size_t sizeToMove = strlen(location) + 1;
   assert(location + textLength + sizeToMove <= m_buffer + m_bufferSize);
   memmove(location + textLength, location, sizeToMove);
-  memmove(location, s, textLength);
+  memmove(location, s + (noShift ? 0 : textLength), textLength);
 }
 
 void TextArea::Text::insertSpacesAtLocation(int numberOfSpaces, char * location) {
@@ -223,6 +277,31 @@ CodePoint TextArea::Text::removePreviousGlyph(char * * position) {
   return removedCodePoint;
 }
 
+size_t TextArea::Text::removeText(const char * start, const char * end) {
+  assert(start <= end);
+  assert(start >= m_buffer && end <= m_buffer + m_bufferSize);
+
+  char * dst = const_cast<char* >(start);
+  char * src = const_cast<char* >(end);
+  size_t delta = src - dst;
+
+  if (delta == 0) {
+    return 0;
+  }
+
+  for (size_t index = src - m_buffer; index < m_bufferSize; index++) {
+    *dst = *src;
+    if (*src == 0) {
+      assert(delta > 0);
+      return delta;
+    }
+    dst++;
+    src++;
+  }
+  assert(false);
+  return 0;
+}
+
 size_t TextArea::Text::removeRemainingLine(const char * location, int direction) {
   assert(m_buffer != nullptr);
   assert(location >= m_buffer && location <= m_buffer + m_bufferSize);
@@ -248,24 +327,7 @@ size_t TextArea::Text::removeRemainingLine(const char * location, int direction)
     }
   }
 
-  char * dst = const_cast<char* >(direction > 0 ? location : codePointPosition);
-  char * src = const_cast<char* >(direction > 0 ? codePointPosition : location);
-  assert(src >= dst);
-
-  size_t delta = src - dst;
-  if (delta == 0) {
-    return 0;
-  }
-  for (size_t index = src - m_buffer; index < m_bufferSize; index++) {
-    *dst = *src;
-    if (*src == 0) {
-      return delta;
-    }
-    dst++;
-    src++;
-  }
-  assert(false);
-  return 0;
+  return removeText(direction > 0 ? location : codePointPosition, direction > 0 ? codePointPosition : location);
 }
 
 /* TextArea::Text::Line */
@@ -341,22 +403,49 @@ void TextArea::ContentView::drawRect(KDContext * ctx, KDRect rect) const {
   for (Text::Line line : m_text) {
     KDCoordinate width = line.glyphWidth(m_font);
     if (y >= topLeft.line() && y <= bottomRight.line() && topLeft.column() < (int)width) {
-      drawLine(ctx, y, line.text(), line.charLength(), topLeft.column(), bottomRight.column());
+      drawLine(ctx, y, line.text(), line.charLength(), topLeft.column(), bottomRight.column(), m_selectionStart, m_selectionEnd);
     }
     y++;
   }
 }
 
-void TextArea::ContentView::drawStringAt(KDContext * ctx, int line, int column, const char * text, size_t length, KDColor textColor, KDColor backgroundColor) const {
+void TextArea::ContentView::drawStringAt(KDContext * ctx, int line, int column, const char * text, int length, KDColor textColor, KDColor backgroundColor, const char * selectionStart, const char * selectionEnd, KDColor backgroundHighlightColor) const {
+  if (length < 0) {
+    return;
+  }
   KDSize glyphSize = m_font->glyphSize();
-  ctx->drawString(
+
+  bool drawSelection = selectionStart != nullptr && selectionEnd > text && selectionStart < text + length;
+  KDPoint nextPoint = ctx->drawString(
     text,
     KDPoint(column*glyphSize.width(), line*glyphSize.height()),
     m_font,
     textColor,
     backgroundColor,
-    length
+    drawSelection ? (selectionStart >= text ? std::min<KDCoordinate>(length, selectionStart - text) : 0) : length
   );
+  if (!drawSelection) {
+    return;
+  }
+  const char * highlightedDrawStart = std::max(selectionStart, text);
+  size_t highlightedDrawLength = std::min(selectionEnd - highlightedDrawStart, length - (highlightedDrawStart - text));
+
+  nextPoint = ctx->drawString(
+    highlightedDrawStart,
+    nextPoint,
+    m_font,
+    textColor,
+    backgroundHighlightColor,
+    highlightedDrawLength);
+
+  const char * notHighlightedDrawStart = highlightedDrawStart + highlightedDrawLength;
+  ctx->drawString(
+    notHighlightedDrawStart,
+    nextPoint,
+    m_font,
+    textColor,
+    backgroundColor,
+    length - (notHighlightedDrawStart - text));
 }
 
 KDSize TextArea::ContentView::minimalSizeForOptimalDisplay() const {
@@ -369,34 +458,29 @@ KDSize TextArea::ContentView::minimalSizeForOptimalDisplay() const {
   );
 }
 
-void TextArea::TextArea::ContentView::setText(char * textBuffer, size_t textBufferSize) {
+void TextArea::ContentView::setText(char * textBuffer, size_t textBufferSize) {
   m_text.setText(textBuffer, textBufferSize);
   m_cursorLocation = text();
 }
 
-bool TextArea::TextArea::ContentView::insertTextAtLocation(const char * text, const char * location) {
-  int textSize = strlen(text);
-  if (m_text.textLength() + textSize >= m_text.bufferSize() || textSize == 0) {
+bool TextArea::ContentView::insertTextAtLocation(const char * text, char * location, int textLength) {
+  int textLen = textLength < 0 ? strlen(text) : textLength;
+  assert(textLen < 0 || textLen <= strlen(text));
+  if (m_text.textLength() + textLen >= m_text.bufferSize() || textLen == 0) {
     return false;
   }
-  bool lineBreak = false;
 
-  // Scan for \n and 0
-  const char * nullLocation = UTF8Helper::PerformAtCodePoints(
-      text, '\n',
-      [](int codePointOffset, void * lineBreak, int context1, int context2) {
-        *((bool *)lineBreak) = true;
-      },
-      [](int c1, void * c2, int c3, int c4) { },
-      &lineBreak, 0);
+  // Scan for \n
+  bool lineBreak = UTF8Helper::HasCodePoint(text, '\n', text + textLen);
 
-  assert(UTF8Helper::CodePointIs(nullLocation, 0));
-  m_text.insertText(text, nullLocation - text, const_cast<char *>(location));
+  m_text.insertText(text, textLen, location);
+  // Replace System parentheses (used to keep layout tree structure) by normal parentheses
+  Poincare::SerializationHelper::ReplaceSystemParenthesesByUserParentheses(location, textLen);
   reloadRectFromPosition(location, lineBreak);
   return true;
 }
 
-bool TextArea::TextArea::ContentView::removePreviousGlyph() {
+bool TextArea::ContentView::removePreviousGlyph() {
   if (cursorLocation() <= text()) {
     assert(cursorLocation() == text());
     return false;
@@ -435,6 +519,20 @@ bool TextArea::ContentView::removeStartOfLine() {
   return false;
 }
 
+size_t TextArea::ContentView::removeText(const char * start, const char * end) {
+  return m_text.removeText(start, end);
+}
+
+size_t TextArea::ContentView::deleteSelection() {
+  assert(!selectionIsEmpty());
+  size_t removedLength = removeText(m_selectionStart, m_selectionEnd);
+  /* We cannot call resetSelection() because m_selectionStart and m_selectionEnd
+   * are invalid */
+  m_selectionStart = nullptr;
+  m_selectionEnd = nullptr;
+  return removedLength;
+}
+
 KDRect TextArea::ContentView::glyphFrameAtPosition(const char * text, const char * position) const {
   assert(text == m_text.text());
   KDSize glyphSize = m_font->glyphSize();
@@ -465,4 +563,12 @@ KDRect TextArea::ContentView::glyphFrameAtPosition(const char * text, const char
 void TextArea::ContentView::moveCursorGeo(int deltaX, int deltaY) {
   Text::Position p = m_text.positionAtPointer(cursorLocation());
   setCursorLocation(m_text.pointerAtPosition(Text::Position(p.column() + deltaX, p.line() + deltaY)));
+}
+
+void TextArea::selectUpDown(bool up) {
+  const char * previousCursorLocation = contentView()->cursorLocation();
+  contentView()->moveCursorGeo(0, up ? -1 : 1);
+  const char * newCursorLocation = contentView()->cursorLocation();
+  contentView()->addSelection(up ? newCursorLocation : previousCursorLocation, up ? previousCursorLocation : newCursorLocation);
+  scrollToCursor();
 }

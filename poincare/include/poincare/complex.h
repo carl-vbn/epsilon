@@ -17,7 +17,7 @@ public:
   size_t size() const override { return sizeof(ComplexNode<T>); }
   int numberOfChildren() const override { return 0; }
 #if POINCARE_TREE_LOG
-  virtual void logNodeName(std::ostream & stream) const override {
+  void logNodeName(std::ostream & stream) const override {
     stream << "Complex";
   }
   virtual void logAttributes(std::ostream & stream) const override {
@@ -44,6 +44,9 @@ public:
   static Complex<T> Builder(T a, T b = 0.0) { return Complex<T>::Builder(std::complex<T>(a, b)); }
   static Complex<T> Undefined() {
     return Complex<T>::Builder(NAN, NAN);
+  }
+  static Complex<T> RealUndefined() {
+    return Complex<T>::Builder(NAN, 0.0);
   }
   std::complex<T> stdComplex() { return *node(); }
   T real() { return node()->real(); }

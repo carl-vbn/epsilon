@@ -47,7 +47,7 @@ public:
   int indexOfKthNonEmptySeries(int k) const;
 
   // Calculations
-  double sumOfColumn(int series, int i) const;
+  double sumOfColumn(int series, int i, bool lnOfSeries = false) const;
   bool seriesNumberOfAbscissaeGreaterOrEqualTo(int series, int i) const;
   uint32_t storeChecksum() const;
   uint32_t storeChecksumForSeries(int series) const;
@@ -55,10 +55,12 @@ public:
   // Colors
   static KDColor colorOfSeriesAtIndex(int i) {
     assert(i >= 0 && i < k_numberOfSeries);
+    assert(i < Palette::numberOfDataColors());
     return Palette::DataColor[i];
   }
   static KDColor colorLightOfSeriesAtIndex(int i) {
     assert(i >= 0 && i < k_numberOfSeries);
+    assert(i < Palette::numberOfLightDataColors());
     return Palette::DataColorLight[i];
   }
 protected:

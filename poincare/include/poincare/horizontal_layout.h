@@ -8,9 +8,11 @@ namespace Poincare {
 
 /* WARNING: A HorizontalLayout should never have a HorizontalLayout child. For
  * instance, use addOrMergeChildAtIndex to add a LayoutNode safely. */
+class HorizontalLayout;
 
 class HorizontalLayoutNode final : public LayoutNode {
   friend class Layout;
+  friend class HorizontalLayout;
 public:
 
   HorizontalLayoutNode() :
@@ -22,12 +24,14 @@ public:
   Type type() const override { return Type::HorizontalLayout; }
 
   // LayoutNode
-  void moveCursorLeft(LayoutCursor * cursor, bool * shouldRecomputeLayout) override;
-  void moveCursorRight(LayoutCursor * cursor, bool * shouldRecomputeLayout) override;
+  void moveCursorLeft(LayoutCursor * cursor, bool * shouldRecomputeLayout, bool forSelection) override;
+  void moveCursorRight(LayoutCursor * cursor, bool * shouldRecomputeLayout, bool forSelection) override;
   LayoutCursor equivalentCursor(LayoutCursor * cursor) override;
   void deleteBeforeCursor(LayoutCursor * cursor) override;
   LayoutNode * layoutToPointWhenInserting(Expression * correspondingExpression) override;
   int serialize(char * buffer, int bufferSize, Preferences::PrintFloatMode floatDisplayMode, int numberOfSignificantDigits) const override;
+
+  int serializeChildrenBetweenIndexes(char * buffer, int bufferSize, Preferences::PrintFloatMode floatDisplayMode, int numberOfSignificantDigits, bool forceIndexes, int firstIndex = -1, int lastIndex = -1) const;
 
   bool isEmpty() const override { return m_numberOfChildren == 1 && const_cast<HorizontalLayoutNode *>(this)->childAtIndex(0)->isEmpty(); }
   bool isCollapsable(int * numberOfOpenParenthesis, bool goingLeft) const override { return m_numberOfChildren != 0; }
@@ -43,7 +47,7 @@ public:
   }
   void eraseNumberOfChildren() override { m_numberOfChildren = 0; }
 #if POINCARE_TREE_LOG
-  virtual void logNodeName(std::ostream & stream) const override {
+  void logNodeName(std::ostream & stream) const override {
     stream << "HorizontalLayout";
   }
 #endif
@@ -53,6 +57,7 @@ protected:
   KDSize computeSize() override;
   KDCoordinate computeBaseline() override;
   KDPoint positionOfChild(LayoutNode * l) override;
+  KDRect relativeSelectionRect(const Layout * selectionStart, const Layout * selectionEnd) const;
 
 private:
   bool willAddChildAtIndex(LayoutNode * l, int * index, int * currentNumberOfChildren, LayoutCursor * cursor) override;
@@ -60,7 +65,7 @@ private:
   bool willRemoveChild(LayoutNode * l, LayoutCursor * cursor, bool force) override;
   void didRemoveChildAtIndex(int index, LayoutCursor * cursor, bool force) override;
   bool willReplaceChild(LayoutNode * oldChild, LayoutNode * newChild, LayoutCursor * cursor, bool force) override;
-  void render(KDContext * ctx, KDPoint p, KDColor expressionColor, KDColor backgroundColor) override {}
+  void render(KDContext * ctx, KDPoint p, KDColor expressionColor, KDColor backgroundColor, Layout * selectionStart = nullptr, Layout * selectionEnd = nullptr, KDColor selectionColor = KDColorRed) override;
   // See comment on NAryExpressionNode
   uint16_t m_numberOfChildren;
 };
@@ -70,12 +75,14 @@ class HorizontalLayout final : public Layout {
 public:
   // Constructors
   HorizontalLayout(HorizontalLayoutNode * n) : Layout(n) {}
-  static HorizontalLayout Builder() { return TreeHandle::NAryBuilder<HorizontalLayout,HorizontalLayoutNode>(); }
-  static HorizontalLayout Builder(Layout l) { return HorizontalLayout::Builder(&l, 1); }
-  static HorizontalLayout Builder(Layout l1, Layout l2) { return HorizontalLayout::Builder(ArrayBuilder<Layout>(l1, l2).array(), 2); }
-  static HorizontalLayout Builder(Layout l1, Layout l2, Layout l3) { return HorizontalLayout::Builder(ArrayBuilder<Layout>(l1, l2, l3).array(), 3); }
-  static HorizontalLayout Builder(Layout l1, Layout l2, Layout l3, Layout l4) { return HorizontalLayout::Builder(ArrayBuilder<Layout>(l1, l2, l3, l4).array(), 4); }
-  static HorizontalLayout Builder(Layout * children, size_t numberOfChildren) { return TreeHandle::NAryBuilder<HorizontalLayout,HorizontalLayoutNode>(static_cast<TreeHandle *>(children), numberOfChildren); }
+
+  // FIXME: use Layout instead of TreeHandle
+  static HorizontalLayout Builder(std::initializer_list<TreeHandle> children = {}) { return TreeHandle::NAryBuilder<HorizontalLayout,HorizontalLayoutNode>(children); }
+  // TODO: Get rid of those helpers
+  static HorizontalLayout Builder(Layout l) { return Builder({l}); }
+  static HorizontalLayout Builder(Layout l1, Layout l2) { return Builder({l1, l2}); }
+  static HorizontalLayout Builder(Layout l1, Layout l2, Layout l3) { return Builder({l1, l2, l3}); }
+  static HorizontalLayout Builder(Layout l1, Layout l2, Layout l3, Layout l4) { return Builder({l1, l2, l3, l4}); }
 
   void addChildAtIndex(Layout l, int index, int currentNumberOfChildren, LayoutCursor * cursor, bool removeEmptyChildren = false);
   // Remove puts a child at the end of the pool
@@ -89,6 +96,10 @@ public:
   void mergeChildrenAtIndex(HorizontalLayout h, int index, bool removeEmptyChildren, LayoutCursor * cursor = nullptr);
 
   Layout squashUnaryHierarchyInPlace();
+
+  void serializeChildren(int firstIndex, int lastIndex, char * buffer, int bufferSize);
+
+  KDRect relativeSelectionRect(const Layout * selectionStart, const Layout * selectionEnd) const { return static_cast<HorizontalLayoutNode *>(node())->relativeSelectionRect(selectionStart, selectionEnd); }
 private:
   void removeEmptyChildBeforeInsertionAtIndex(int * index, int * currentNumberOfChildren, bool shouldRemoveOnLeft, LayoutCursor * cursor = nullptr);
 };
